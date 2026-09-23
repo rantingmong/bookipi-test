@@ -1,0 +1,9 @@
+openapi: 3.1.0
+info:
+  title: System API
+  version: 1.0.0
+paths:
+  /health:
+    $ref: ./get-health/openapi.yml#/paths/~1health
+x-endpoints:
+  - ./get-health/openapi.yml

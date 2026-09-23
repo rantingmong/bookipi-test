@@ -61,6 +61,8 @@ Payment and SQS facts can arrive in either order. Reconciliation waits for both 
 
 The browser uses the Next.js page for the storefront. It sends the purchase request directly to the configured CloudFront checkout endpoint. CloudFront routes it through API Gateway to the checkout Lambda.
 
+The storefront uses Next.js static export and calls the backend from the browser. The backend bootstrap exposes `GET /api/system/health`. OpenAPI endpoint YAML is the API contract source. Generated schemas, routers, handler bindings, and clients are ignored build output. `packages/checkout-authorizer` is a separate package boundary; its runtime is planned for a later increment.
+
 Express does not invoke Lambda and does not proxy the purchase request. Express owns listing setup, status and result reads, SQS consumption, payment callbacks, and MongoDB persistence.
 
 The authorizer checks the Better Auth session in Valkey. MongoDB stores users, credentials, and business data. The authorizer does not call Express or MongoDB.
@@ -114,3 +116,4 @@ Checkout reports sold out only when the pool is empty. The live storefront wordi
 - Added the payment fact and terminal order stage to the master flow.
 - Defined physical stock, the hidden reserve count, the public count, and the one-pool Valkey claim model.
 - Named the cancellation flow slot reallocation after order cancellation while preserving technical release markers.
+- Added the increment 1 OpenAPI contracts, generated API code, Express health route, static storefront, and authorizer package boundary.

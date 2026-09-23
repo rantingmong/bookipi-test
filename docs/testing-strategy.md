@@ -4,11 +4,13 @@
 
 This document defines the planned verification layers for the flash-sale system.
 
-No test has run in design increment 0.
+Increment 1 adds Vitest coverage for structured Zod validation and the session middleware. Later increments add the planned service and deployment tests below.
 
 ## Flow
 
 Vitest will verify pure rules and service boundaries.
+
+Backend changes use test-driven development: write a focused test, run it to confirm the expected failure, implement the smallest change, then rerun the focused test and full backend test suite. Run API code generation before tests when a change depends on generated files.
 
 Integration tests will run against MongoDB, Valkey, and LocalStack where its services support the required behavior. Deployment-shaped checkout tests will cover CloudFront, API Gateway REST API, and Lambda when that path exists.
 
@@ -37,6 +39,8 @@ Each layer will report its evidence before the related increment is complete.
 - This document contains no invented benchmark result.
 
 ## Unit tests with Vitest
+
+Increment 1 checks that invalid input returns structured 400 issues and does not reach a route. The dedicated session middleware tests check missing identity rejection, identity forwarding, and session resolver errors. The suite also checks exact-origin CORS headers, preflight rejection, and the storefront wrapper's API origin.
 
 Unit tests will cover:
 
@@ -253,3 +257,5 @@ Later increments must attach test output to the worktree review.
 - Added an assertion that Origin rejection makes no Valkey read and invokes no checkout Lambda.
 - Added callback serialization races and mock-button recovery after a quarantined callback.
 - Added count validation, public-count examples, shared-pool concurrency, release, and completion-limit checks.
+- Added increment 1 tests for request validation and protected-route session behavior.
+- Added exact-origin CORS response and preflight checks.

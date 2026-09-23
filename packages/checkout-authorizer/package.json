@@ -1,0 +1,10 @@
+{
+  "name": "@bookipi/checkout-authorizer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Separate API Gateway REST request authorizer package.",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

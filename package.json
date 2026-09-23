@@ -2,10 +2,22 @@
   "name": "bookipi-flash-sale",
   "version": "0.0.0",
   "private": true,
-  "description": "Incremental design for a high-throughput Bookipi flash-sale system.",
+  "description": "High-throughput Bookipi flash-sale system.",
   "packageManager": "pnpm@11.20.0",
   "engines": {
     "node": ">=24 <25"
   },
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "generate:api": "node scripts/generate-api.mjs",
+    "typecheck": "pnpm generate:api && pnpm --filter @bookipi/backend typecheck && pnpm --filter @bookipi/storefront typecheck",
+    "test": "pnpm generate:api && pnpm --filter @bookipi/backend test && pnpm --filter @bookipi/storefront test",
+    "build": "pnpm generate:api && pnpm --filter @bookipi/backend build && pnpm --filter @bookipi/storefront build"
+  },
+  "devDependencies": {
+    "@codewithagents/openapi-server": "2.2.1",
+    "@redocly/cli": "2.54.2",
+    "openapi-zod-ts": "2.3.0",
+    "yaml": "2.8.1"
+  }
 }

@@ -1,0 +1,25 @@
+openapi: 3.1.0
+info:
+  title: System health endpoint
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      operationId: getSystemHealth
+      summary: Check API health
+      responses:
+        '200':
+          description: API is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemHealth'
+components:
+  schemas:
+    SystemHealth:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]

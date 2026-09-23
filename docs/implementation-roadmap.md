@@ -17,10 +17,10 @@ Update the affected README and design document when a decision changes.
 ## Decisions & assumptions
 
 - Increment 0 is the current design-only increment.
-- The selected stack remains pnpm, TypeScript, Express, Next.js, CloudFront, API Gateway, Lambda, MongoDB, Valkey, and LocalStack.
-- API Gateway REST API uses a separate REQUEST Lambda authorizer to check Better Auth sessions in Valkey. Its package placement and Valkey network setup are implementation decisions within the existing three-package shell.
+- The selected stack remains pnpm, TypeScript, Express, Next.js static export, CloudFront, API Gateway, Lambda, MongoDB, Valkey, and LocalStack.
+- API Gateway REST API uses `packages/checkout-authorizer` for its separate REQUEST Lambda authorizer. It checks Better Auth sessions in Valkey.
 - Each future feature needs a user review before implementation if its angles change behavior or system boundaries.
-- No feature increment is implemented in this worktree yet.
+- Increment 1 provides the first runtime bootstrap. Later business increments remain planned.
 
 ## Increment 0: repository shell and design record
 
@@ -40,15 +40,17 @@ Verification: JSON parsing, Markdown link checks, Mermaid syntax review, `git di
 
 ## Increment 1: repository bootstrap and shared contracts
 
-Status: awaiting review.
+Status: complete.
 
-Angle A: define TypeScript contracts and validation first, then add package tooling.
+Angle A: define OpenAPI YAML contracts and Zod validation first, then add package tooling.
 
 Angle B: add service bootstraps first, then derive contracts from route handlers.
 
-The review must choose the contract and package boundaries before code starts. It must place the separate REST API authorizer in an existing package; it must not add a fourth package without a new design review.
+Selection: Angle A. The API uses one contract file per endpoint, a group configuration file, and a generated Express router. The dedicated authorizer package is approved.
 
-Planned verification: package metadata validation, TypeScript checks, and contract unit tests.
+Increment 1 adds the Express bootstrap and health endpoint, generated server bindings and browser client, protected-route middleware, and the static-export storefront shell. It does not add Better Auth, persistence, inventory, checkout, or SQS runtime behavior.
+
+Verification: package metadata validation, API generation, TypeScript checks, contract middleware tests, package builds, HTTP health smoke check, and `git diff --check`.
 
 ## Increment 2: Better Auth and listing setup
 
@@ -184,7 +186,8 @@ Open choice: select the live storefront wording for the case where public remain
 
 - Added active-owner indexes, cancellation retry, and slot-reallocation recovery checks.
 - Recorded the known Valkey pop-to-SQS crash gap and removed durable replay from the plan.
-- Selected CloudFront-to-API-Gateway checkout with a Better Auth session authorizer; package placement remains open within the existing packages.
+- Selected CloudFront-to-API-Gateway checkout with a Better Auth session authorizer in `packages/checkout-authorizer`.
 - Selected Valkey secondary storage for Better Auth sessions and API Gateway REST REQUEST authorization.
 - Added cookie-scope, conditional CORS, preflight, and session-cleanup checks.
 - Recorded `stockTotal`, `reserveSlots`, `publicStock`, one-pool seeding and claims, and the unresolved live-stock display wording.
+- Selected contract-first OpenAPI YAML and added the increment 1 bootstrap scope.

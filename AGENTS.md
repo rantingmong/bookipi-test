@@ -4,9 +4,10 @@
 
 This repository contains a pnpm monorepo for a high-throughput Bookipi flash sale.
 
-- `packages/backend` contains the planned Express API, Better Auth integration, inventory setup, reads, and durable consumers.
-- `packages/storefront` contains the planned Next.js user interface.
+- `packages/backend` contains the Express API bootstrap, OpenAPI contracts, and planned business services.
+- `packages/storefront` contains the static-export Next.js user interface.
 - `packages/checkout-processor` contains the planned AWS Lambda checkout processor.
+- `packages/checkout-authorizer` contains the planned API Gateway authorizer.
 - `docs` contains the system-design entry point, design facets, test strategy, and implementation roadmap.
 
 Read the root `README.md` and every applicable directory `README.md` before work.
@@ -16,6 +17,7 @@ Read the root `README.md` and every applicable directory `README.md` before work
 - Use pnpm for package management.
 - Use Node.js 24 and TypeScript.
 - Use ECMAScript modules with `"type": "module"`.
+- Use the backend `#app` and `#api/*` package imports, and the storefront `@/*` TypeScript alias.
 - Do not add npm or Yarn lockfiles.
 - Do not guess commands. Confirm a command in a manifest or document before use.
 
@@ -59,9 +61,11 @@ Present at least two implementation angles for each future feature increment.
 
 Obtain a user choice when the angles change behavior, risk, or system boundaries.
 
-Do not add speculative abstractions, dependencies, migrations, code generation, Docker files, or runtime configuration.
+Do not add speculative abstractions, migrations, Docker files, or runtime configuration.
 
 ## Planned verification
+
+Use test-driven development for backend changes. Write a focused test first and run it to confirm it fails for the expected reason. Then implement the smallest change and rerun the focused test and full backend test suite. Run code generation before tests when the change depends on generated API files.
 
 Future increments plan these verification categories:
 
@@ -72,10 +76,8 @@ Future increments plan these verification categories:
 - k6 stress tests.
 - `git diff --check` and review of the final worktree.
 
-No code generation or database migration exists in this increment.
+`pnpm generate:api` bundles OpenAPI YAML and writes ignored schemas, Express routers, handler bindings, and browser clients. Keep all generated output ignored. No database migration exists.
 
 ## Local services and URLs
 
-Local API, storefront, Lambda, MongoDB, Valkey, and LocalStack URLs are planned only.
-
-No local URL is available in this increment.
+The API dev server uses port `3001` by default. The storefront reads `NEXT_PUBLIC_API_BASE_URL` at build time. No other local URL is defined.
