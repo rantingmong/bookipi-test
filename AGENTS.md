@@ -7,7 +7,7 @@ This repository contains a pnpm monorepo for a high-throughput Bookipi flash sal
 - `packages/backend` contains the planned Express API, Better Auth integration, inventory setup, reads, and durable consumers.
 - `packages/storefront` contains the planned Next.js user interface.
 - `packages/checkout-processor` contains the planned AWS Lambda checkout processor.
-- `docs` contains design, test, and implementation planning documents.
+- `docs` contains the system-design entry point, design facets, test strategy, and implementation roadmap.
 
 Read the root `README.md` and every applicable directory `README.md` before work.
 
@@ -43,7 +43,9 @@ Keep durable current guidance in the README body.
 
 Keep dated historical facts only in each README `Change log` section.
 
-Keep design decisions and trade-offs in `docs/system-design.md`.
+Keep the master flow and facet map in `docs/system-design.md`.
+
+Keep detailed decisions and trade-offs in the relevant design facet under `docs/`.
 
 Keep test plans and acceptance criteria in `docs/testing-strategy.md`.
 

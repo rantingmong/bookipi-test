@@ -17,7 +17,8 @@ Update the affected README and design document when a decision changes.
 ## Decisions & assumptions
 
 - Increment 0 is the current design-only increment.
-- The selected stack remains pnpm, TypeScript, Express, Next.js, Lambda, MongoDB, Valkey, and LocalStack.
+- The selected stack remains pnpm, TypeScript, Express, Next.js, CloudFront, API Gateway, Lambda, MongoDB, Valkey, and LocalStack.
+- API Gateway uses a separate Lambda authorizer to check the Better Auth session in MongoDB. Its package placement is an implementation decision within the existing three-package shell.
 - Each future feature needs a user review before implementation if its angles change behavior or system boundaries.
 - No feature increment is implemented in this worktree yet.
 
@@ -45,7 +46,7 @@ Angle A: define TypeScript contracts and validation first, then add package tool
 
 Angle B: add service bootstraps first, then derive contracts from route handlers.
 
-The review must choose the contract and package boundaries before code starts.
+The review must choose the contract and package boundaries before code starts. It must place the separate API Gateway authorizer in an existing package; it must not add a fourth package without a new design review.
 
 Planned verification: package metadata validation, TypeScript checks, and contract unit tests.
 
@@ -91,7 +92,7 @@ Selection recorded by this design: Angle A.
 
 Reason: the hot path stays close to Valkey and scales independently from durable reads and writes.
 
-Planned verification: concurrent requests, no overselling, one item per user, stable `orderId` for the same key while Valkey state remains, best-effort publish retry, duplicate SQS delivery, and the documented crash gap after the Valkey pop.
+Planned verification: concurrent requests, no overselling, one item per user, stable `orderId` for the same `(listingId, trusted customerId, client idempotencyKey)` while Valkey state remains, cross-customer key isolation, best-effort publish retry, duplicate SQS delivery, and the documented crash gap after the Valkey pop.
 
 ## Increment 5: durable reservation facts
 
@@ -139,13 +140,15 @@ Planned verification: both event orders, conflicting payment outcomes in both ar
 
 Status: awaiting review.
 
-Angle A: let the Next.js storefront call the Express API directly.
+Angle A: let the browser call the configured CloudFront checkout endpoint directly. CloudFront routes to API Gateway, whose Lambda authorizer checks the Better Auth session before checkout Lambda runs.
 
-Angle B: add a Next.js backend-for-frontend route that proxies Express.
+Angle B: add a Next.js backend-for-frontend route that proxies the CloudFront checkout endpoint.
 
-The review must choose the client boundary after the API contract stabilizes.
+Selection recorded by this design: Angle A.
 
-Planned verification: Playwright sign-in, status, purchase, retry, mock payment, result, and access-control flows.
+Reason: the purchase request must bypass Express. The direct path has fewer request hops and keeps the hot path in API Gateway and Lambda.
+
+Planned verification: Playwright sign-in, status reads, direct checkout, session authorization, missing and unapproved Origin rejection, purchase retry, mock payment, result reads, access control, cookie and Origin forwarding, and disabled checkout response caching.
 
 ## Increment 9: stress and resilience evidence
 
@@ -173,3 +176,4 @@ Planned verification: throughput, latency percentiles, error rate, failure injec
 
 - Added active-owner indexes, cancellation retry, and slot-reallocation recovery checks.
 - Recorded the known Valkey pop-to-SQS crash gap and removed durable replay from the plan.
+- Selected CloudFront-to-API-Gateway checkout with a Better Auth session authorizer; package placement remains open within the existing packages.

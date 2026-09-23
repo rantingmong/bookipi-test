@@ -10,7 +10,7 @@ No test has run in design increment 0.
 
 Vitest will verify pure rules and service boundaries.
 
-Integration tests will run against MongoDB, Valkey, and LocalStack.
+Integration tests will run against MongoDB, Valkey, and LocalStack. Deployment-shaped checkout tests will cover CloudFront, API Gateway, and Lambda when that path exists.
 
 Playwright will verify the browser purchase flow.
 
@@ -23,6 +23,9 @@ Each layer will report its evidence before the related increment is complete.
 - Tests will use TypeScript and the repository pnpm workflow.
 - Integration tests will use real MongoDB, Valkey, and LocalStack services.
 - LocalStack will cover Lambda and SQS behavior that the local environment supports.
+- Checkout uses an API Gateway Lambda authorizer that validates the Better Auth session with Better Auth semantics.
+- The authorizer applies Better Auth session semantics for cookie integrity and expiry, with a MongoDB-backed session lookup.
+- The authorizer checks an exact allowlist of storefront origins for cookie-authenticated checkout POST requests.
 - Test data will use one listing with controlled stock and unique customer identities.
 - Stress results will describe the test environment, load profile, duration, throughput, latency percentiles, errors, and invariant results.
 - This document contains no invented benchmark result.
@@ -33,6 +36,7 @@ Unit tests will cover:
 
 - Sale window state at before, start, inside, end, and after boundaries.
 - Idempotency key validation and stable result mapping.
+- Idempotency bindings use `(listingId, trusted customerId, client idempotencyKey)`.
 - One-item-per-user decision rules.
 - Event schema validation.
 - Duplicate and reorder handling for at-least-once Standard SQS delivery.
@@ -43,7 +47,7 @@ Unit tests will cover:
 - Exact-once slot release markers and Valkey release decisions.
 - Concurrent payment-success and payment-failure terminal races.
 - The first valid provider outcome wins under concurrent conflicting callbacks.
-- Idempotent payment-session creation on a same-key retry after SQS publication.
+- Idempotent payment-session creation on a same-tuple retry after SQS publication.
 - Payment-first stubs with partial-index behavior.
 - Immutable mock-session `customerId` owner checks before SQS.
 - MongoDB rejection of duplicate active customer ownership with the partial `$in` index.
@@ -52,6 +56,7 @@ Unit tests will cover:
 - Release intents are created only when the cancellation transaction commits.
 - The release worker retries a pending intent without adding a slot twice.
 - Service authentication on the provider-shaped mock callback route.
+- The internal mock-session endpoint rejects unauthenticated browser requests and attempted browser `customerId` or session-binding overrides. Rejected requests create no binding.
 - Event-driven reconciliation of reservation and payment facts.
 
 Unit tests will use deterministic clocks and generated identifiers.
@@ -63,14 +68,22 @@ Integration tests will use MongoDB, Valkey, and LocalStack.
 They will cover:
 
 - Listing creation, `listing-slot` creation, Valkey seed, and publication verification.
+- The deployed checkout request passes from CloudFront through API Gateway to Lambda without an Express purchase proxy.
+- The authorizer rejects missing, invalid, expired, and revoked sessions before checkout Lambda runs.
+- The authorizer rejects checkout POST requests with a missing or unapproved `Origin` before checkout Lambda runs.
+- The internal mock-session endpoint rejects an unauthenticated or browser-style session-creation request, including one with a forged `customerId`.
+- A cross-site checkout request fails even when CORS or cookie `SameSite` settings would otherwise allow it.
+- Browser-supplied `customerId` values cannot replace the authorizer identity.
 - Purchase rejection before start, after end, and for an unpublished listing.
 - Atomic slot reservation under concurrent requests.
 - Duplicate customer requests and duplicate idempotency keys.
-- The same idempotency key returns the same `orderId` and payment session while Valkey retains its state.
+- The same `(listingId, trusted customerId, client idempotencyKey)` returns the same `orderId` and payment session while Valkey retains its state.
+- Two customers who submit the same client key for the same listing receive separate bindings; neither can read the other's order or session.
+- One customer who uses the same client key for two listings receives separate bindings.
 - A new idempotency key is rejected after a completed purchase.
 - A new idempotency key succeeds after a failed or expired payment releases the old slot.
-- The cancelled attempt remains stable for its original idempotency key.
-- SQS publication failure followed by a best-effort retry with the same key while Valkey state remains intact; verify that the retry does not reserve a second slot.
+- The cancelled attempt remains stable for its original `(listingId, trusted customerId, client idempotencyKey)` tuple.
+- SQS publication failure followed by a best-effort retry with the same tuple while Valkey state remains intact; verify that the retry does not reserve a second slot.
 - Duplicate and out-of-order Standard SQS deliveries.
 - SQS then payment event delivery.
 - Payment then SQS event delivery.
@@ -92,6 +105,7 @@ They will cover:
 - Release crashes before and after the Valkey release side effect.
 - Release crash after MongoDB owner clear and before the Valkey release side effect.
 - An old release retry after the slot is allocated to a newer reservation.
+- A cancelled release does not clear a newer slot owner or a secured/completed slot.
 - A callback retry after a rolled-back provider-event transaction.
 - Full Valkey state loss after a pop and before SQS closes checkout; MongoDB facts do not rebuild ambiguous inventory.
 - A delayed SQS event does not reopen a cancelled order or change slot ownership.
@@ -121,6 +135,8 @@ The tests will also verify that one customer cannot read another customer result
 
 The tests will verify that an unauthenticated or non-owner browser cannot use the mock outcome route.
 
+The tests will verify that CloudFront forwards the Better Auth session cookie and `Origin` header, the authorizer passes trusted `customerId`, authorizer-result caching is disabled, and checkout responses are not cached. Deployment checks will verify cookie domain, `SameSite`, origin-request forwarding, and exact-origin allowlist configuration.
+
 The tests will verify that the mock outcome route is disabled outside local and test environments.
 
 The tests will verify that a browser cannot call the service-authenticated provider callback route.
@@ -132,7 +148,7 @@ The tests will verify that an authenticated service can call the provider callba
 k6 will test these scenarios:
 
 - Many users compete for fewer slots than requests.
-- Many repeated attempts reuse an idempotency key.
+- Many repeated attempts reuse the same idempotency tuple for each customer and listing.
 - Requests arrive before, during, and after the sale window.
 - SQS and payment callbacks arrive in both orders.
 - SQS and payment callbacks repeat.
@@ -152,7 +168,7 @@ The following checks are measurable and apply to every runtime increment:
 | One completed order per customer and listing | At most one `COMPLETE` order exists for each `(listingId, customerId)` pair. Cancelled attempts do not block a new checkout. |
 | One active customer ownership | The partial MongoDB index rejects a second `AWAITING_FACTS`, `PAYMENT_PENDING`, or `COMPLETE` order after `customerId` exists. |
 | One slot owner | At most one order or reservation owns a `(listingId, slotId)` pair. |
-| Idempotency | Repeating one key while Valkey retains its state uses one reservation identifier and one `orderId`; a retry can republish the event best effort. A new key is required after cancellation. |
+| Idempotency | Repeating `(listingId, trusted customerId, client idempotencyKey)` while Valkey retains its state uses one reservation and `orderId`. Another customer or listing cannot reuse the binding. A new key is required after cancellation. |
 | Sale window | No request outside the active window creates a reservation. |
 | Durable persistence | Every acknowledged event has one matching MongoDB order fact record. |
 | Duplicate safety | Replaying an SQS event or payment callback does not increase order count or release count. |
@@ -193,3 +209,4 @@ Later increments must attach test output to the worktree review.
 - Added loss-between-pop-and-publish, closed-sale same-key retry, late-event, and manual-recovery coverage.
 - Replaced durable replay and operator-recovery claims with the known pop-to-SQS gap and best-effort retry checks.
 - Added conflicting callback, durable release intent, worker retry, and provider route authentication coverage.
+- Added CloudFront-to-API-Gateway checkout routing, session-authorizer, and cache-forwarding coverage.

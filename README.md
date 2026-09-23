@@ -12,15 +12,19 @@ No runtime exists yet.
 
 ## Flow
 
-The planned system uses a Next.js storefront, an Express and Node API, an AWS Lambda checkout processor, MongoDB, Valkey, and LocalStack for local Lambda and SQS work.
+The planned system uses a Next.js storefront, an Express and Node API, CloudFront, API Gateway, an AWS Lambda checkout processor, MongoDB, Valkey, and LocalStack for local Lambda and SQS work.
 
 Express creates a listing and durable `listing-slot` records in MongoDB.
 
 Express seeds a Valkey availability list and publishes the listing only after seed verification.
 
-The authenticated purchase request reaches Express, which invokes the checkout Lambda with a trusted customer identity and a client idempotency key.
+The browser sends a purchase request directly to the configured CloudFront checkout endpoint. CloudFront routes the request through API Gateway to the checkout Lambda. Express never invokes Lambda and never proxies the purchase request.
 
-The Lambda generates the authoritative `orderId`, atomically reserves one Valkey slot, then publishes an order-reserved event to Standard SQS and starts a mocked payment session.
+An API Gateway Lambda authorizer validates the Better Auth session, including cookie integrity and expiry, and uses its MongoDB-backed session lookup. It passes trusted `customerId` to Lambda. The Lambda ignores browser-supplied `customerId` values. CloudFront forwards the session cookie and does not cache checkout responses.
+
+For cookie-authenticated checkout POST requests, the authorizer also requires an approved `Origin` and rejects missing or unapproved values. Deployment configuration supplies the exact storefront origin allowlist.
+
+The Lambda generates the authoritative `orderId`, atomically reserves one Valkey slot, and publishes an order-reserved event to Standard SQS. After SQS accepts the event, Lambda creates or reuses the mock payment session through a service-authenticated internal Express endpoint.
 
 The Express SQS worker long-polls SQS and idempotently upserts order facts into MongoDB.
 
@@ -39,7 +43,7 @@ The package map is:
 - `packages/backend`: Express API, Better Auth, listing setup, reads, Express SQS worker, and order reconciliation.
 - `packages/storefront`: Next.js browser experience.
 - `packages/checkout-processor`: AWS Lambda order creation, hot-path reservation, SQS publication, and mock payment-session creation.
-- `docs`: current system design, test strategy, and implementation roadmap.
+- `docs`: master flow, design facets, test strategy, and implementation roadmap.
 
 The system uses pnpm, Node.js 24, TypeScript, and ECMAScript modules.
 
@@ -49,7 +53,7 @@ Valkey provides temporary real-time inventory arbitration during the sale.
 
 SQS transports events and is never the only order copy.
 
-The same idempotency key reuses one reservation while Valkey retains its state. A retry can republish the event, but this is best effort.
+The logical idempotency key is `(listingId, trusted customerId, client idempotencyKey)`. The same customer and listing reuse one reservation while Valkey retains its state. Another customer or listing cannot reuse that binding.
 
 Standard SQS provides at-least-once delivery and can reorder messages. The worker handles duplicate and out-of-order events by event and order identity.
 
@@ -72,6 +76,8 @@ Only completed purchases enforce one item per customer and listing.
 A failed or expired payment releases the slot for a new checkout with a new idempotency key.
 
 Real payment-provider integration is outside this take-home scope.
+
+The separate API Gateway authorizer will use one of the existing packages. The package placement remains an implementation choice.
 
 Read the design documents before runtime implementation.
 
@@ -97,7 +103,13 @@ Commands in this README must work with this design-only increment.
 - [Storefront plan](packages/storefront/README.md)
 - [Checkout processor plan](packages/checkout-processor/README.md)
 - [Document map](docs/README.md)
-- [System design](docs/system-design.md)
+- [System design entry point](docs/system-design.md)
+- [Listing and inventory](docs/listing-and-inventory.md)
+- [Checkout](docs/checkout.md)
+- [Orders](docs/orders.md)
+- [Payments](docs/payments.md)
+- [Identity and access](docs/identity-and-access.md)
+- [Reliability](docs/reliability.md)
 - [Testing strategy](docs/testing-strategy.md)
 - [Implementation roadmap](docs/implementation-roadmap.md)
 

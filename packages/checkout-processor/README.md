@@ -6,7 +6,11 @@ The checkout processor will run as an AWS Lambda function for the purchase hot p
 
 ## Flow
 
-The backend will pass a trusted customer identity, listing identifier, and idempotency key.
+API Gateway will pass a trusted customer identity, listing identifier, and idempotency key after its Lambda authorizer validates the Better Auth session.
+
+For cookie-authenticated checkout POST requests, the authorizer will reject a missing or unapproved `Origin`. Deployment configuration supplies the exact origin allowlist.
+
+The browser will call the CloudFront checkout endpoint. Express will not invoke Lambda or proxy the purchase request.
 
 The Lambda will generate the authoritative `orderId`.
 
@@ -16,7 +20,9 @@ The same Valkey operation will create the reservation and idempotency binding.
 
 The Lambda will publish an order-reserved event to a Standard SQS queue.
 
-The Lambda will call the internal Express mock-payment endpoint with trusted `customerId`, `orderId`, `reservationId`, `listingId`, and `slotId` data.
+After SQS accepts the event, the Lambda will call the internal Express mock-payment endpoint with service authentication and trusted `customerId`, `orderId`, `reservationId`, `listingId`, and `slotId` data.
+
+The endpoint will reject browser requests. The implementation will select the exact service credential mechanism.
 
 The endpoint will create or reuse the MongoDB session binding by `orderId`.
 
@@ -25,13 +31,15 @@ The Lambda will return a stable attempt result for safe retries.
 ## Decisions & assumptions
 
 - Lambda owns hot-path Valkey reservation and SQS publication.
+- API Gateway supplies trusted identity. Lambda ignores browser-supplied `customerId` values.
+- CORS and cookie `SameSite` settings do not replace the authorizer's required Origin check.
 - The initial quantity is exactly one.
-- The Lambda will not trust a customer identity from the browser.
 - SQS is transport and is not the durable order store.
-- A retry uses the same idempotency key and reuses the reservation while Valkey retains its state.
-- A repeated logical attempt returns the same `orderId`; downstream retries are best effort.
+- A retry uses the same `(listingId, trusted customerId, client idempotencyKey)` and reuses the reservation while Valkey retains its state.
+- A repeated logical attempt by the same customer for the same listing returns the same `orderId`; another customer cannot reuse that binding.
 - A new idempotency key cannot bypass a completed purchase, but it can start a new checkout after cancellation.
 - The server stores the session binding and validates callback data against it.
+- The internal mock-session endpoint accepts requests only with service authentication and uses Lambda's authorizer-derived `customerId`.
 - The implementation increment will choose Lambda timeout and SQS delivery settings.
 
 ## Gotchas
@@ -42,7 +50,7 @@ It has no handler, dependency, script, deployment file, or local URL.
 
 The Express SQS worker consumes the LocalStack queue. This design has no SQS-to-Lambda event source mapping.
 
-If SQS publication fails after reservation, the Lambda returns a retryable service error. A later request with the same key can retry publication while Valkey retains the reservation.
+If SQS publication fails after reservation, the Lambda returns a retryable service error. The same customer and listing can retry publication with the same client key while Valkey retains the reservation.
 
 This retry is best effort. There is no durable replay if Lambda stops after the Valkey pop and before SQS accepts the event, or if Valkey loses the reservation state.
 
@@ -51,6 +59,12 @@ Standard SQS can deliver duplicate or out-of-order events. The backend worker ha
 Payment failure or expiration cancels the order and releases its slot through one guarded operation.
 
 The release compares the old `reservationId` before it removes the customer claim or returns the slot.
+
+## Design links
+
+- [System design](../../docs/system-design.md)
+- [Checkout](../../docs/checkout.md)
+- [Identity and access](../../docs/identity-and-access.md)
 
 ## Change log
 
