@@ -6,11 +6,13 @@ This repository contains the bootstrap and shared contracts for a high-throughpu
 
 The source requirements define one configurable sale, one product, limited stock, one item per user, purchase status, purchase results, a React frontend, high throughput, resilience, no overselling, unit and integration tests, stress tests, a system diagram, and implementation documentation.
 
-Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. Business features remain planned.
+Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. The authentication slice of Increment 2 adds email/password sign-up and login. Listing setup remains planned.
 
 ## Flow
 
 The planned system uses a Next.js storefront, an Express and Node API, CloudFront, API Gateway, an AWS Lambda checkout processor, MongoDB, Valkey, and LocalStack for local Lambda and SQS work.
+
+The storefront sends sign-up and login requests to Better Auth routes on Express. Better Auth stores users and credentials in MongoDB. It stores sessions in Valkey secondary storage. The static storefront includes credentials when `NEXT_PUBLIC_API_BASE_URL` points to a different origin.
 
 Express creates a listing with physical slot count `stockTotal` and a configurable hidden count `reserveSlots`. It derives the advertised count as `publicStock = stockTotal - reserveSlots`. The reserve is part of `stockTotal`, not extra inventory.
 
@@ -46,7 +48,7 @@ The [reliability facet](docs/reliability.md) records current safeguards and poss
 
 The package map is:
 
-- `packages/backend`: Express API, Better Auth, listing setup, reads, Express SQS worker, and order reconciliation.
+- `packages/backend`: Express API and Better Auth email/password now; listing setup, reads, Express SQS worker, and order reconciliation remain planned.
 - `packages/storefront`: Next.js browser experience.
 - `packages/checkout-processor`: AWS Lambda order creation, hot-path reservation, SQS publication, and mock payment-session creation.
 - `packages/checkout-authorizer`: API Gateway REST REQUEST authorization, planned for a later increment.
@@ -54,7 +56,7 @@ The package map is:
 
 The system uses pnpm, Node.js 24, TypeScript, and ECMAScript modules.
 
-MongoDB stores Better Auth users, accounts, credentials, and business data. Better Auth sessions use Valkey secondary storage.
+MongoDB stores Better Auth users, accounts, and credentials, plus future business data. Better Auth sessions use Valkey secondary storage with an auth key prefix.
 
 Valkey provides temporary real-time inventory arbitration during the sale.
 
@@ -92,7 +94,7 @@ Read the design documents before runtime implementation.
 
 ## Gotchas
 
-Increment 1 provides an API health route and a static storefront shell. It does not provide sign-in, listing, checkout, payment, or local data services.
+The home page provides the API health check. Sign-up and login pages provide the current account flow. Listing, checkout, payment, and local service setup remain planned.
 
 The planned local URLs are not available.
 
@@ -104,7 +106,7 @@ Do not report benchmark results before a stress test produces them.
 
 If the storefront and checkout origins differ, configure credentialed CORS. Return the exact approved storefront origin in `Access-Control-Allow-Origin`, never `*`, and return `Access-Control-Allow-Credentials: true` on successful POST and relevant error responses. CloudFront must allow and forward `OPTIONS` and its preflight headers. The unauthenticated API Gateway `OPTIONS` method returns the exact origin and credentials headers, plus `Access-Control-Allow-Methods` and `Access-Control-Allow-Headers` for required values. It must not use the checkout POST authorizer or invoke checkout. Same-origin checkout does not need a browser preflight.
 
-Commands in this README must work with this design-only increment.
+Commands in this README apply to the current runtime and planned system.
 
 ### Navigation
 
@@ -133,6 +135,8 @@ pnpm --version
 git status --short --branch
 pnpm install
 pnpm generate:api
+pnpm format
+pnpm format:check
 pnpm typecheck
 pnpm test
 pnpm build
@@ -164,3 +168,4 @@ Use Node.js 24 and pnpm 11.20. Set `NEXT_PUBLIC_API_BASE_URL` at build time to c
 - Named the customer-facing cancellation flow slot reallocation after order cancellation; technical release markers keep their names.
 - Added increment 1 package tooling, OpenAPI generation, API bootstrap, and static storefront export.
 - Recorded possible future reliability mitigations without changing the selected runtime design.
+- Implemented the Better Auth email/password slice of Increment 2 with MongoDB accounts and Valkey sessions. Listing setup remains pending.

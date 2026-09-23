@@ -28,7 +28,11 @@
     "node": ">=24 <25"
   },
   "dependencies": {
+    "@better-auth/redis-storage": "1.7.5",
+    "better-auth": "1.7.5",
     "express": "5.1.0",
+    "ioredis": "^5.11.1",
+    "mongodb": "^7.6.0",
     "zod": "4.1.12"
   },
   "devDependencies": {

@@ -4,7 +4,7 @@
 
 This document defines the planned verification layers for the flash-sale system.
 
-Increment 1 adds Vitest coverage for structured Zod validation and the session middleware. Later increments add the planned service and deployment tests below.
+Increment 1 adds Vitest coverage for structured Zod validation and the session middleware. The authentication slice of Increment 2 adds local tests for auth configuration, storage selection, session identity mapping, Express handler ordering, and the storefront client. These tests do not prove MongoDB or Valkey integration.
 
 ## Flow
 
@@ -40,7 +40,7 @@ Each layer will report its evidence before the related increment is complete.
 
 ## Unit tests with Vitest
 
-Increment 1 checks that invalid input returns structured 400 issues and does not reach a route. The dedicated session middleware tests check missing identity rejection, identity forwarding, and session resolver errors. The suite also checks exact-origin CORS headers, preflight rejection, and the storefront wrapper's API origin.
+Increment 1 checks that invalid input returns structured 400 issues and does not reach a route. The dedicated session middleware tests check missing identity rejection, identity forwarding, and session resolver errors. The suite also checks exact-origin CORS, preflight rejection, the storefront API origin, auth configuration, raw auth request ordering, session identity mapping, and credentialed browser auth calls.
 
 Unit tests will cover:
 
@@ -157,16 +157,18 @@ They will cover:
 
 Playwright will verify the customer-visible path:
 
-1. A customer signs in.
-2. The storefront shows the sale state.
-3. The customer submits one purchase.
-4. The UI handles an accepted or retryable result.
-5. The customer retries with the same idempotency key when required.
-6. The mock payment page displays success and failure buttons.
-7. The page sends an owner-checked mock outcome, which Express translates into the callback handler.
-8. The UI shows the durable purchase result.
-9. A second purchase is rejected.
-10. After a failed payment, the page keeps its controls disabled until the SQS-backed binding exists. The original key returns `CANCELLED` after matching payment and reservation facts exist, and a new key starts checkout after release completes.
+1. A customer signs up with a name, email, and password. Better Auth signs the customer in after successful sign-up.
+2. The customer can sign out, then sign in with the same email and password.
+3. The account pages show the current session.
+4. The storefront shows the sale state.
+5. The customer submits one purchase.
+6. The UI handles an accepted or retryable result.
+7. The customer retries with the same idempotency key when required.
+8. The mock payment page displays success and failure buttons.
+9. The page sends an owner-checked mock outcome, which Express translates into the callback handler.
+10. The UI shows the durable purchase result.
+11. A second purchase is rejected.
+12. After a failed payment, the page keeps its controls disabled until the SQS-backed binding exists. The original key returns `CANCELLED` after matching payment and reservation facts exist, and a new key starts checkout after release completes.
 
 The tests will also verify that one customer cannot read another customer result.
 
@@ -200,29 +202,29 @@ The test report will state the load profile and the environment before it states
 
 The following checks are measurable and apply to every runtime increment:
 
-| Invariant | Acceptance check |
-| --- | --- |
-| Public count | At publication, `publicStock` equals `stockTotal - reserveSlots`; for example, 15 and 5 gives 10, and 10 and 2 gives 8. |
-| Physical inventory | The Valkey pool contains all `stockTotal` slots, and each slot has at most one active claim. |
-| No overselling | Completed orders for one listing are less than or equal to `stockTotal`. |
-| One completed order per customer and listing | At most one `COMPLETE` order exists for each `(listingId, customerId)` pair. Cancelled attempts do not block a new checkout. |
-| One active customer ownership | The partial MongoDB index rejects a second `AWAITING_FACTS` or `COMPLETE` order after `customerId` exists. |
-| One slot owner | At most one order or reservation owns a `(listingId, slotId)` pair. |
-| Idempotency | Repeating `(listingId, trusted customerId, client idempotencyKey)` while Valkey retains its state uses one reservation and `orderId`. Another customer or listing cannot reuse the binding. A new key is required after cancellation. |
-| Sale window | No request outside the active window creates a reservation. |
-| Durable persistence | Every acknowledged event has one matching MongoDB order fact record. |
-| Duplicate safety | Replaying an SQS event or payment callback does not increase order count or release count. |
-| Reorder safety | Reordered events do not move an order to an older state. |
-| Terminal safety | A delayed SQS event does not reopen `CANCELLED`, and a delayed failure does not cancel `COMPLETE`. |
-| Payment outcome | The first provider outcome that matches the immutable SQS binding wins. Mismatched callbacks are quarantined. Later conflicting callbacks do not change the order or create another release. |
-| Callback order | MongoDB assigns each new authenticated provider event a per-order receive sequence. Callback insertion, binding persistence, reconciliation, and terminal transitions serialize per order. Each terminal transition chooses the lowest-sequence committed matching event and ignores provider-supplied timestamps. |
-| Release exactly once | A failure or expiry adds one slot at most once, after both facts exist and slot ownership is validated. |
-| Durable release intent | A payment-first callback fact and event marker can commit while the order remains `AWAITING_FACTS`. After binding validation, `CANCELLED` and its pending release intent commit in one MongoDB transaction. The release worker retries pending intents until completion. |
-| Callback access | Only an authenticated service can call the provider-shaped callback route. A browser can submit a mock outcome only for its own order in local or test mode. |
-| Release ownership | An old release cannot clear a newer `currentReservationId`, customer claim, or `orderId`. |
-| Release retry | The worker checks the Valkey operation marker first. An applied marker completes the old intent without changing a newer owner. A missing/expired marker with newer ownership keeps the intent pending for manual reconciliation. |
-| Valkey-to-SQS gap | A crash or Valkey loss after the pop and before SQS has no durable replay guarantee. Checkout fails closed when ownership is unclear. |
-| Stress evidence | Each run reports requests per second, p50, p95, p99, error rate, duration, and invariant results. |
+| Invariant                                    | Acceptance check                                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public count                                 | At publication, `publicStock` equals `stockTotal - reserveSlots`; for example, 15 and 5 gives 10, and 10 and 2 gives 8.                                                                                                                                                                                            |
+| Physical inventory                           | The Valkey pool contains all `stockTotal` slots, and each slot has at most one active claim.                                                                                                                                                                                                                       |
+| No overselling                               | Completed orders for one listing are less than or equal to `stockTotal`.                                                                                                                                                                                                                                           |
+| One completed order per customer and listing | At most one `COMPLETE` order exists for each `(listingId, customerId)` pair. Cancelled attempts do not block a new checkout.                                                                                                                                                                                       |
+| One active customer ownership                | The partial MongoDB index rejects a second `AWAITING_FACTS` or `COMPLETE` order after `customerId` exists.                                                                                                                                                                                                         |
+| One slot owner                               | At most one order or reservation owns a `(listingId, slotId)` pair.                                                                                                                                                                                                                                                |
+| Idempotency                                  | Repeating `(listingId, trusted customerId, client idempotencyKey)` while Valkey retains its state uses one reservation and `orderId`. Another customer or listing cannot reuse the binding. A new key is required after cancellation.                                                                              |
+| Sale window                                  | No request outside the active window creates a reservation.                                                                                                                                                                                                                                                        |
+| Durable persistence                          | Every acknowledged event has one matching MongoDB order fact record.                                                                                                                                                                                                                                               |
+| Duplicate safety                             | Replaying an SQS event or payment callback does not increase order count or release count.                                                                                                                                                                                                                         |
+| Reorder safety                               | Reordered events do not move an order to an older state.                                                                                                                                                                                                                                                           |
+| Terminal safety                              | A delayed SQS event does not reopen `CANCELLED`, and a delayed failure does not cancel `COMPLETE`.                                                                                                                                                                                                                 |
+| Payment outcome                              | The first provider outcome that matches the immutable SQS binding wins. Mismatched callbacks are quarantined. Later conflicting callbacks do not change the order or create another release.                                                                                                                       |
+| Callback order                               | MongoDB assigns each new authenticated provider event a per-order receive sequence. Callback insertion, binding persistence, reconciliation, and terminal transitions serialize per order. Each terminal transition chooses the lowest-sequence committed matching event and ignores provider-supplied timestamps. |
+| Release exactly once                         | A failure or expiry adds one slot at most once, after both facts exist and slot ownership is validated.                                                                                                                                                                                                            |
+| Durable release intent                       | A payment-first callback fact and event marker can commit while the order remains `AWAITING_FACTS`. After binding validation, `CANCELLED` and its pending release intent commit in one MongoDB transaction. The release worker retries pending intents until completion.                                           |
+| Callback access                              | Only an authenticated service can call the provider-shaped callback route. A browser can submit a mock outcome only for its own order in local or test mode.                                                                                                                                                       |
+| Release ownership                            | An old release cannot clear a newer `currentReservationId`, customer claim, or `orderId`.                                                                                                                                                                                                                          |
+| Release retry                                | The worker checks the Valkey operation marker first. An applied marker completes the old intent without changing a newer owner. A missing/expired marker with newer ownership keeps the intent pending for manual reconciliation.                                                                                  |
+| Valkey-to-SQS gap                            | A crash or Valkey loss after the pop and before SQS has no durable replay guarantee. Checkout fails closed when ownership is unclear.                                                                                                                                                                              |
+| Stress evidence                              | Each run reports requests per second, p50, p95, p99, error rate, duration, and invariant results.                                                                                                                                                                                                                  |
 
 This increment has no measured values.
 

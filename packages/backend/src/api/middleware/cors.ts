@@ -3,7 +3,9 @@ import type { RequestHandler } from 'express'
 const allowedMethods = 'GET, HEAD, POST, OPTIONS'
 const allowedHeaders = 'Content-Type, Authorization'
 
-export function corsMiddleware(storefrontOrigin = process.env.STOREFRONT_ORIGIN): RequestHandler {
+export function corsMiddleware(
+  storefrontOrigin = process.env.STOREFRONT_ORIGIN,
+): RequestHandler {
   return (request, response, next) => {
     const requestOrigin = request.get('Origin')
     if (!requestOrigin) {

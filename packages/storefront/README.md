@@ -2,11 +2,15 @@
 
 ## Purpose
 
-The storefront will provide the React user interface for sale status, sign-in, purchase attempts, and purchase results.
+The storefront provides the API health shell and Better Auth sign-up and login pages. Sale status, purchase, and result screens remain planned.
 
 ## Runtime
 
 Next.js exports a static site to `out/`. The home page checks `GET /api/system/health` from the browser when `NEXT_PUBLIC_API_BASE_URL` is set to the API origin at build time. It uses SWR's deferred mutation hook for the button request. It does not use a Next.js API route.
+
+The `/sign-up` page registers the name, email, and password fields with React Hook Form. SWR triggers the Better Auth request. Better Auth applies its default password policy and signs in the user after success. The `/login` page registers the email and password fields with the same pattern. SWR triggers the login and sign-out requests. Both pages show the current session.
+
+The auth pages keep feedback and session elements in the document. Tailwind CSS group data attributes control their visibility. Auth feedback reports the completed request. The session panel shows the current session. The Tailwind setup omits Preflight to preserve browser default styles. A session refresh error appears separately from auth feedback.
 
 Run `pnpm generate:api` from the repository root to update the ignored browser client. Keep tracked feature wrappers under `src/lib/features`.
 
@@ -16,7 +20,7 @@ Keep page UI in `src/app/<page>/page.tsx` and its state hook in `page.state.tsx`
 
 Next.js will read sale status and purchase results from the Express backend.
 
-The customer will sign in through Better Auth.
+The customer can sign up and sign in through the Better Auth client. Auth requests use `NEXT_PUBLIC_API_BASE_URL` and include browser credentials.
 
 The browser will send one purchase attempt with a client-generated idempotency key directly to the configured CloudFront checkout endpoint. Serve auth and checkout under the same host, or keep the checkout hostname within the Better Auth cookie scope. If the storefront and checkout origins differ, the request will use `credentials: 'include'`.
 
@@ -51,7 +55,7 @@ The backend disables the mock outcome route outside local and test environments.
 
 ## Gotchas
 
-The storefront shell has no sign-in, listing, purchase, or result screen yet. No local API URL is defined.
+The storefront has sign-up and login pages. Listing, purchase, and result screens are not implemented. No local API URL is defined.
 
 Do not use React Router for this package.
 
@@ -86,3 +90,4 @@ The browser cannot self-assert payment success in a real deployment.
 - Recorded the advertised count and the open live-count wording choice.
 - Added the static-export Next.js app shell and browser API health check.
 - Added SWR for the deferred health request and kept the generated client behind the tracked feature wrapper.
+- Added dedicated sign-up and login pages with session display and sign-out.

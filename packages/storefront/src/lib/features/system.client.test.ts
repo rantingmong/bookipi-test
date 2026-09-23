@@ -13,6 +13,8 @@ describe('checkSystemHealth', () => {
 
     await checkSystemHealth('https://api.example.test/')
 
-    expect(getSystemHealth).toHaveBeenCalledWith({ baseUrl: 'https://api.example.test' })
+    expect(getSystemHealth).toHaveBeenCalledWith({
+      baseUrl: 'https://api.example.test',
+    })
   })
 })

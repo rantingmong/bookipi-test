@@ -58,14 +58,14 @@ The Lambda generates candidate `orderId` and `paymentSessionId` values before th
 - Each purchase has quantity one.
 - Valkey keys use the listing ID as a namespace:
 
-  | Key | Type | Purpose |
-  | --- | --- | --- |
-  | `sale:{listingId}:meta` | hash | Sale window, publication state, seed version, `stockTotal`, `reserveSlots`, and derived `publicStock`. |
-  | `sale:{listingId}:available-slots` | list | Available slot identifiers. |
-  | `sale:{listingId}:user-claims` | hash | Customer ID to reservation ID mapping. |
-  | `sale:{listingId}:idempotency` | hash | Customer ID and client idempotency key to stable attempt and order data within the listing. |
-  | `sale:{listingId}:reservation:{reservationId}` | hash | Order, customer, slot, state, event, and session data. |
-  | `sale:{listingId}:reservation:{reservationId}:release` | hash | Guarded release marker. |
+  | Key                                                    | Type | Purpose                                                                                                |
+  | ------------------------------------------------------ | ---- | ------------------------------------------------------------------------------------------------------ |
+  | `sale:{listingId}:meta`                                | hash | Sale window, publication state, seed version, `stockTotal`, `reserveSlots`, and derived `publicStock`. |
+  | `sale:{listingId}:available-slots`                     | list | Available slot identifiers.                                                                            |
+  | `sale:{listingId}:user-claims`                         | hash | Customer ID to reservation ID mapping.                                                                 |
+  | `sale:{listingId}:idempotency`                         | hash | Customer ID and client idempotency key to stable attempt and order data within the listing.            |
+  | `sale:{listingId}:reservation:{reservationId}`         | hash | Order, customer, slot, state, event, and session data.                                                 |
+  | `sale:{listingId}:reservation:{reservationId}:release` | hash | Guarded release marker.                                                                                |
 
 - MongoDB `listing-slots` has a unique `{ listingId: 1, slotId: 1 }` index and a `{ listingId: 1, state: 1 }` lookup index.
 - A completed order retains the customer claim. A cancellation releases that claim only when it still points to the old reservation.

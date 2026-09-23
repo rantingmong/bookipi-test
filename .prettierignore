@@ -1,0 +1,10 @@
+pnpm-lock.yaml
+node_modules/
+dist/
+coverage/
+.next/
+out/
+*.tsbuildinfo
+packages/backend/src/api/**/generated/
+packages/backend/src/api/.generated/
+packages/storefront/src/lib/api/generated/

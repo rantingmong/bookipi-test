@@ -1,0 +1,21 @@
+# environment feature
+
+## Purpose
+
+This feature reads and validates backend environment settings during startup.
+
+## Boundaries
+
+- `feature.ts` has no service connections or other startup side effects.
+- The server reads settings before it connects MongoDB or Valkey.
+- Other features receive validated settings through their dependencies.
+
+## Settings
+
+The backend requires `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL`.
+
+Set `STOREFRONT_ORIGIN` when the storefront uses a different origin.
+
+## Tests
+
+`feature.test.ts` checks required settings and exact-origin validation.

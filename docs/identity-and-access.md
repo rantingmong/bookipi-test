@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines trust boundaries and the selected checkout identity design.
+This document defines the current sign-up and login flow and the planned checkout identity design.
 
 ## Flow
 
@@ -44,6 +44,8 @@ sequenceDiagram
 
 The browser sends its Better Auth session cookie and `Origin` header to the configured CloudFront checkout endpoint. CloudFront forwards both values to API Gateway.
 
+The storefront sends email/password requests to Express at `/api/auth/*`. Express passes each raw request to Better Auth before JSON parsing. Better Auth stores users and credentials in MongoDB. It stores sessions in Valkey secondary storage with the `bookipi:auth:` prefix. The sign-up page submits a name, email, and password. Better Auth uses its default password policy and auto-signs in after successful sign-up. The login page submits an email and password. Both pages can read the current session and sign out.
+
 The REST API REQUEST Lambda authorizer checks `Origin` first. It rejects a missing or unapproved origin without calling Better Auth or reading Valkey. After the origin passes, it checks the opaque Better Auth cookie with the same Better Auth secret. It reads the session from Valkey secondary storage and applies Better Auth cookie integrity and expiry rules. It passes only the active `customerId` to checkout. Checkout does not use the stored role snapshot.
 
 Better Auth uses MongoDB for users, accounts, and credentials. It uses Valkey secondary storage for sessions. Keep `session.storeSessionInDatabase` unset or `false`. Better Auth must not fall back to MongoDB when a session is absent from Valkey. A missing or expired Valkey session requires a new login.
@@ -72,6 +74,9 @@ The authorizer is a separate Lambda handler. API Gateway invokes the checkout La
 - Keep the authorizer in the separate `packages/checkout-authorizer` package. It does not belong in the backend or checkout processor.
 - Public users can read sale status. Authenticated customers can attempt checkout and read only their own result. Administrators can create listings, load stock, verify seeds, and inspect recovery state.
 - Better Auth uses email/password credentials and its MongoDB adapter for users and credentials. Valkey secondary storage holds sessions and a user snapshot.
+- The backend requires `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL` at startup. `STOREFRONT_ORIGIN` adds one exact trusted origin when set.
+- Better Auth sets `session.storeSessionInDatabase` to `false`. An absent Valkey session has no MongoDB fallback.
+- The storefront client sends credentials and reads `NEXT_PUBLIC_API_BASE_URL` at build time.
 - Checkout uses only the active `customerId`. Privileged Express routes must read current roles from MongoDB or invalidate affected sessions after a role change.
 - Valkey loss removes active session state as well as inventory state. Customers must sign in again after session state is lost. The design does not claim durable session storage.
 - The provider-shaped payment callback requires service authentication. The browser can request a mock outcome only for its own order in local or test mode.
@@ -109,3 +114,4 @@ The browser does not call Valkey, SQS, MongoDB, the checkout Lambda, or the prov
 - Added a sequence diagram that shows the Valkey session read and the separate MongoDB user and credential store.
 - Split sign-in session creation from checkout authorization.
 - Placed the authorizer in a dedicated package outside the backend and checkout processor.
+- Implemented the email/password sign-up and login slice of Increment 2. Listing setup remains pending.
