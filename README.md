@@ -14,27 +14,35 @@ No runtime exists yet.
 
 The planned system uses a Next.js storefront, an Express and Node API, CloudFront, API Gateway, an AWS Lambda checkout processor, MongoDB, Valkey, and LocalStack for local Lambda and SQS work.
 
-Express creates a listing and durable `listing-slot` records in MongoDB.
+Express creates a listing with physical slot count `stockTotal` and a configurable hidden count `reserveSlots`. It derives the advertised count as `publicStock = stockTotal - reserveSlots`. The reserve is part of `stockTotal`, not extra inventory.
 
-Express seeds a Valkey availability list and publishes the listing only after seed verification.
+Express creates one durable `listing-slot` record for each `stockTotal` slot in MongoDB. It seeds all slots in one Valkey availability list and publishes only after seed verification. Every slot in this pool is claimable. Atomic Valkey pop prevents two requests from claiming the same slot.
 
 The browser sends a purchase request directly to the configured CloudFront checkout endpoint. CloudFront routes the request through API Gateway to the checkout Lambda. Express never invokes Lambda and never proxies the purchase request.
 
-An API Gateway Lambda authorizer validates the Better Auth session, including cookie integrity and expiry, and uses its MongoDB-backed session lookup. It passes trusted `customerId` to Lambda. The Lambda ignores browser-supplied `customerId` values. CloudFront forwards the session cookie and does not cache checkout responses.
+For cookie-authenticated checkout POST requests, an API Gateway REST REQUEST Lambda authorizer checks `Origin` first. It rejects a missing or unapproved value without calling Better Auth or reading Valkey. Deployment configuration supplies the exact storefront origin allowlist.
 
-For cookie-authenticated checkout POST requests, the authorizer also requires an approved `Origin` and rejects missing or unapproved values. Deployment configuration supplies the exact storefront origin allowlist.
+After `Origin` passes, the authorizer checks the opaque Better Auth cookie and reads the session from Valkey secondary storage. It passes trusted `customerId` to Lambda. It does not call Express or MongoDB. Better Auth uses MongoDB for users and credentials. The Lambda ignores browser-supplied `customerId` values. CloudFront forwards the session cookie and does not cache checkout responses.
 
-The Lambda generates the authoritative `orderId`, atomically reserves one Valkey slot, and publishes an order-reserved event to Standard SQS. After SQS accepts the event, Lambda creates or reuses the mock payment session through a service-authenticated internal Express endpoint.
+The authorizer uses Better Auth `getSession` with `disableRefresh: true` and `disableCookieCache: true`. It does not refresh an active session. Better Auth may still delete an expired session and return an expiry cookie. The authorizer cannot forward that cookie to the browser. API Gateway authorizer-result caching is disabled. A missing session or Valkey error denies checkout. Valkey loss removes session state, so customers must sign in again after recovery.
 
-The Express SQS worker long-polls SQS and idempotently upserts order facts into MongoDB.
+Serve auth and checkout under the same host, or keep the checkout hostname within the Better Auth cookie scope. If the storefront and checkout origins differ, the storefront request must use `credentials: 'include'`. The exact hostnames remain a deployment choice.
 
-The payment callback can arrive before or after the SQS event.
+Lambda generates candidate `orderId` and `paymentSessionId` values before it makes the atomic Valkey claim. Valkey stores those values with the reservation. A same-key retry reuses the stored values. Lambda sends the immutable order, customer, listing, reservation, slot, and payment-session binding in the SQS event. SQS is the only Lambda-to-Express bridge.
 
-One event-driven reconciliation function combines both fact paths and records completed sales in MongoDB.
+The Express SQS worker long-polls SQS and idempotently upserts reservation facts and the mock payment binding into MongoDB.
 
-The first valid payment outcome wins. A cancellation and its pending release intent commit together. An Express worker retries the guarded Valkey release.
+The mock payment page waits for the MongoDB binding before it shows owner-checked success and failure buttons. A service-authenticated provider callback can arrive before or after SQS.
+
+One event-driven reconciliation function combines both fact paths. The order stays `AWAITING_FACTS` until both payment and SQS reservation facts exist. A callback that arrives first stores a pending payment fact. Release relies on slot ownership from SQS, not webhook slot fields.
+
+After SQS supplies and validates the immutable binding, the first valid correlated payment outcome wins. A failure or expiry changes the order to `CANCELLED` and creates a pending release intent in one MongoDB transaction. Slot reallocation after order cancellation means that an Express worker returns the slot to the Valkey pool. A later checkout can claim it. The worker first verifies ownership and retries the guarded Valkey operation; the slot is not available immediately.
+
+MongoDB atomically assigns each new authenticated provider event a per-order `receiveSequence`. Callback insertion, binding persistence, reconciliation, and terminal transitions serialize through the same per-order record. Each terminal transition selects the lowest-sequence committed event that matches the SQS binding. It does not trust provider timestamps. A quarantined callback does not block mock outcome buttons after binding persistence when the order remains `AWAITING_FACTS` with no valid outcome. A fresh release intent initializes a Valkey `not_applied` marker before its first release call. The worker checks this marker first. An applied marker completes the old intent without changing a newer owner. A missing marker after an attempt, an expired or unavailable marker, or a newer or unknown owner keeps the intent pending for manual reconciliation.
 
 The design has no durable replay for a Lambda crash after the Valkey pop and before SQS accepts the event.
+
+The [reliability facet](docs/reliability.md) records current safeguards and possible future mitigations. Kafka and DynamoDB Streams are not part of this increment.
 
 ## Decisions & assumptions
 
@@ -47,7 +55,7 @@ The package map is:
 
 The system uses pnpm, Node.js 24, TypeScript, and ECMAScript modules.
 
-MongoDB stores Better Auth records and business data.
+MongoDB stores Better Auth users, accounts, credentials, and business data. Better Auth sessions use Valkey secondary storage.
 
 Valkey provides temporary real-time inventory arbitration during the sale.
 
@@ -59,11 +67,11 @@ Standard SQS provides at-least-once delivery and can reorder messages. The worke
 
 MongoDB is the final persistence layer for completed sales and durable order facts.
 
-The checkout Lambda owns initial logical order creation and generates the authoritative `orderId`.
+At most `stockTotal` orders can reach `COMPLETE`. The advertised `publicStock` count does not limit the Valkey pool. The sale is sold out only when Valkey has no claimable slots.
 
 The payment processor is mocked initially.
 
-A future storefront page provides success and failure buttons. It calls an owner-checked mock outcome route, and Express calls the shared callback handler.
+A future storefront page provides success and failure buttons only after the SQS worker persists the binding. It calls an owner-checked mock outcome route, and Express calls the shared callback handler.
 
 The mock outcome route requires the authenticated order owner and a local or test-only flag.
 
@@ -75,9 +83,11 @@ Only completed purchases enforce one item per customer and listing.
 
 A failed or expired payment releases the slot for a new checkout with a new idempotency key.
 
+A payment result before SQS leaves the order in `AWAITING_FACTS` and holds the slot. Callback correlation mismatches are quarantined. Reconciliation sets `CANCELLED` and creates a release intent only after it validates the SQS binding.
+
 Real payment-provider integration is outside this take-home scope.
 
-The separate API Gateway authorizer will use one of the existing packages. The package placement remains an implementation choice.
+The separate REST API authorizer will use one of the existing packages. Its package placement and Valkey network setup remain implementation choices.
 
 Read the design documents before runtime implementation.
 
@@ -92,6 +102,8 @@ A crash or Valkey loss after the slot pop and before SQS publication can leave n
 The repository has not performed external publication.
 
 Do not report benchmark results before a stress test produces them.
+
+If the storefront and checkout origins differ, configure credentialed CORS. Return the exact approved storefront origin in `Access-Control-Allow-Origin`, never `*`, and return `Access-Control-Allow-Credentials: true` on successful POST and relevant error responses. CloudFront must allow and forward `OPTIONS` and its preflight headers. The unauthenticated API Gateway `OPTIONS` method returns the exact origin and credentials headers, plus `Access-Control-Allow-Methods` and `Access-Control-Allow-Headers` for required values. It must not use the checkout POST authorizer or invoke checkout. Same-origin checkout does not need a browser preflight.
 
 Commands in this README must work with this design-only increment.
 
@@ -139,3 +151,12 @@ No install, build, test, dev-server, deployment, or stress-test command exists y
 - Added mock-session security, Valkey rebuild recovery, and cancelled-payment retry behavior.
 - Clarified best-effort SQS retry and the known Valkey pop-to-SQS crash gap.
 - Clarified first-outcome payment rules, durable release intents, and callback route authentication.
+- Moved Better Auth sessions to Valkey and selected a REST REQUEST authorizer that does not refresh active sessions.
+- Recorded cookie-scope and conditional cross-origin CORS requirements.
+- Required Origin rejection before Better Auth or Valkey access.
+- Made SQS the only Lambda-to-Express bridge and put the immutable mock payment binding in the event.
+- Kept payment-first orders in `AWAITING_FACTS` until SQS validates slot ownership.
+- Serialized callback outcomes by per-order receive sequence and clarified mock buttons after callback quarantine.
+- Defined `stockTotal`, configurable `reserveSlots`, derived `publicStock`, and one Valkey pool for every physical slot.
+- Named the customer-facing cancellation flow slot reallocation after order cancellation; technical release markers keep their names.
+- Recorded possible future reliability mitigations without changing the selected runtime design.
