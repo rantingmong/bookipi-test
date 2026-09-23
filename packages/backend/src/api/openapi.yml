@@ -1,0 +1,9 @@
+openapi: 3.1.0
+info:
+  title: Bookipi backend API
+  version: 1.0.0
+paths:
+  /api/system/health:
+    $ref: ./system/openapi.yml#/paths/~1health
+x-groups:
+  - ./system/openapi.yml

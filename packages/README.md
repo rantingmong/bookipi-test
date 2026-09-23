@@ -33,14 +33,14 @@ Standard SQS can duplicate and reorder events. The worker processes them idempot
 - `checkout-processor` owns Lambda order creation, the hot path for reservation, SQS publication, and mock payment-session creation.
 - `backend` owns the Express SQS worker, unified order transition, and pending slot-release worker.
 - Express does not invoke Lambda or proxy the purchase request. API Gateway REST API uses a REQUEST authorizer that reads sessions from Valkey.
-- The authorizer is a separate Lambda handler. Its package placement remains open within these three packages.
+- `checkout-authorizer` owns the separate API Gateway REST REQUEST authorizer.
 - Valkey scopes idempotency by listing, authorizer-derived customer, and client key.
 - All packages use TypeScript and ECMAScript modules.
-- Package manifests contain metadata only in design increment 0.
+- Increment 1 adds runtime bootstraps for the backend and storefront. Business features remain planned.
 
 ## Gotchas
 
-No package has source code or dependencies yet.
+The backend exposes the system health contract. It has no authentication, listing, inventory, or checkout behavior yet.
 
 Do not add package scripts until the related runtime exists and its command is verified.
 
@@ -69,3 +69,4 @@ Read each package README before changing that package.
 - Moved Better Auth sessions to Valkey and recorded the REST REQUEST authorizer boundary.
 - Made SQS the only Lambda-to-Express bridge for immutable mock-payment bindings.
 - Required both payment and reservation facts before terminal state or slot release.
+- Added the separate checkout-authorizer package and increment 1 runtime boundaries.

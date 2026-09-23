@@ -4,6 +4,24 @@
 
 The backend will provide the Express API and the durable services around the sale.
 
+## Runtime
+
+`src/server.ts` starts the Express API. `src/app.ts` mounts the API router. The current endpoint is `GET /api/system/health`.
+
+Run `pnpm generate:api` before you start the backend in development. The root `typecheck`, `test`, and `build` scripts generate API code first.
+
+The root OpenAPI file lists group configuration files. Each group file lists endpoint contracts in `x-endpoints`. Each endpoint file defines one operation. Run `pnpm generate:api` from the repository root to build ignored schemas, routers, handler bindings, and the browser client.
+
+Keep each endpoint's `openapi.yml` beside its tracked `handler.ts`. Each API group has an `openapi.yml` and `router.ts`. Put domain logic in `src/features/<name>` and external integrations in `src/services/<name>`. Use `types.ts` for internal types, Zod `schemas.ts` or `schema.ts` for external inputs and DTOs, and `models.ts` for MongoDB models only when needed. Add `constants.ts` only when a feature or service needs constants.
+
+The generator clears generated output before it runs. Keep business logic in tracked endpoint `handler.ts` files.
+
+Set `STOREFRONT_ORIGIN` to one exact origin when the browser app uses a different origin. The API adds CORS headers for that origin and handles its preflight requests. It rejects unmatched preflight requests. Leave the setting unset for same-origin use. Do not use `*` or a URL path.
+
+## Tests
+
+Use test-driven development for backend changes. Add a focused test first and run it to confirm that it fails for the expected reason. Then make the smallest change and rerun the focused test and full backend test suite. Run `pnpm generate:api` first when the change depends on generated API files.
+
 ## Flow
 
 Express will authenticate customers with Better Auth.
@@ -74,9 +92,7 @@ Only `stockTotal` physical slots exist, including the configured reserve. The Va
 
 ## Gotchas
 
-This package has metadata only.
-
-It has no API, worker, reconciler, source directory, dependencies, script, migration, or runtime URL.
+The current health endpoint has no business storage. Authentication, workers, reconciler, migrations, and local service URLs are not implemented.
 
 Do not make Express the hot-path inventory authority.
 
@@ -123,3 +139,6 @@ The system has no durable replay if Lambda stops after the Valkey pop and before
 - Made SQS the only Lambda-to-Express bridge and delayed payment-first terminal state until SQS correlation.
 - Serialized callback reconciliation by per-order receive sequence and preserved mock outcomes after a quarantined callback.
 - Added the physical slot count, derived public count, and all-slot Valkey seed responsibility.
+- Added the Express bootstrap, OpenAPI health contract, endpoint handler, generated router, and request validation middleware.
+- Added exact-origin CORS for the optional static storefront origin.
+- Added dedicated session middleware tests and backend test-driven development guidance.

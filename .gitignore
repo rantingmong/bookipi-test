@@ -9,3 +9,15 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+# Generated API bundles, schemas, routers, handler bindings, and clients
+packages/backend/src/api/**/generated/
+packages/backend/src/api/.generated/
+packages/storefront/src/lib/api/generated/
+
+# Next.js output
+packages/storefront/.next/
+packages/storefront/out/
+packages/storefront/next-env.d.ts
+
+# Test output
+coverage/

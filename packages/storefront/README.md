@@ -4,6 +4,14 @@
 
 The storefront will provide the React user interface for sale status, sign-in, purchase attempts, and purchase results.
 
+## Runtime
+
+Next.js exports a static site to `out/`. The home page checks `GET /api/system/health` from the browser when `NEXT_PUBLIC_API_BASE_URL` is set to the API origin at build time. It uses SWR's deferred mutation hook for the button request. It does not use a Next.js API route.
+
+Run `pnpm generate:api` from the repository root to update the ignored browser client. Keep tracked feature wrappers under `src/lib/features`.
+
+Keep page UI in `src/app/<page>/page.tsx` and its state hook in `page.state.tsx`. Put page-specific components in `parts`, shared hooks in `src/hooks`, generated client code in `src/lib/api/generated`, tracked client wrappers in `src/lib/features`, and shared UI components in `src/ui`. Create these directories when their first file is needed.
+
 ## Flow
 
 Next.js will read sale status and purchase results from the Express backend.
@@ -43,9 +51,7 @@ The backend disables the mock outcome route outside local and test environments.
 
 ## Gotchas
 
-This package has metadata only.
-
-It has no browser code, dependency, script, route, generated asset, or local URL.
+The storefront shell has no sign-in, listing, purchase, or result screen yet. No local API URL is defined.
 
 Do not use React Router for this package.
 
@@ -78,3 +84,5 @@ The browser cannot self-assert payment success in a real deployment.
 - Added the Better Auth cookie-scope precondition and cross-origin request credentials rule.
 - Made the mock payment page wait for the SQS-backed binding before it shows outcome buttons.
 - Recorded the advertised count and the open live-count wording choice.
+- Added the static-export Next.js app shell and browser API health check.
+- Added SWR for the deferred health request and kept the generated client behind the tracked feature wrapper.

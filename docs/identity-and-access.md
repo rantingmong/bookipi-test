@@ -69,7 +69,7 @@ The authorizer is a separate Lambda handler. API Gateway invokes the checkout La
 - Do not rely on CORS or cookie `SameSite` settings alone to prevent cross-site requests. The authorizer's Origin check is required.
 - Keep the Better Auth cookie opaque. Do not add a JWT or a second checkout token.
 - The Lambda never trusts a browser-supplied `customerId`.
-- Keep the authorizer as a separate Lambda handler. Its package placement is an implementation decision. Keep the repository at three packages.
+- Keep the authorizer in the separate `packages/checkout-authorizer` package. It does not belong in the backend or checkout processor.
 - Public users can read sale status. Authenticated customers can attempt checkout and read only their own result. Administrators can create listings, load stock, verify seeds, and inspect recovery state.
 - Better Auth uses email/password credentials and its MongoDB adapter for users and credentials. Valkey secondary storage holds sessions and a user snapshot.
 - Checkout uses only the active `customerId`. Privileged Express routes must read current roles from MongoDB or invalidate affected sessions after a role change.
@@ -108,3 +108,4 @@ The browser does not call Valkey, SQS, MongoDB, the checkout Lambda, or the prov
 - Required Origin rejection before Better Auth or Valkey access.
 - Added a sequence diagram that shows the Valkey session read and the separate MongoDB user and credential store.
 - Split sign-in session creation from checkout authorization.
+- Placed the authorizer in a dedicated package outside the backend and checkout processor.

@@ -4,6 +4,8 @@
 
 The checkout processor will run as an AWS Lambda function for the purchase hot path.
 
+Increment 1 does not implement Lambda behavior. The processor stays separate from Express, and SQS remains its only bridge to Express.
+
 ## Flow
 
 For cookie-authenticated checkout POST requests, the API Gateway REST REQUEST Lambda authorizer will reject a missing or unapproved `Origin` before it calls Better Auth or reads Valkey. Deployment configuration supplies the exact origin allowlist.
@@ -45,9 +47,7 @@ The Lambda will return a stable attempt result for safe retries.
 
 ## Gotchas
 
-This package has metadata only.
-
-It has no handler, dependency, script, deployment file, or local URL.
+This package has no source, runtime, dependencies, scripts, deployment file, or local URL. Increment 1 keeps Lambda behavior out of this package.
 
 The Express SQS worker consumes the LocalStack queue. This design has no SQS-to-Lambda event source mapping.
 
@@ -85,3 +85,4 @@ The release compares the old `reservationId` before it removes the customer clai
 - Clarified that API Gateway forwards checkout fields and the authorizer returns only trusted `customerId`.
 - Made SQS the only Lambda-to-Express bridge and stored candidate IDs in the atomic reservation for same-key reuse.
 - Defined the single-pool claim rule, physical completion limit, and sold-out authority.
+- Kept the Lambda package free of Express dependencies during the bootstrap increment.

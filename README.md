@@ -2,13 +2,11 @@
 
 ## Purpose
 
-This repository is design increment 0 for a high-throughput Bookipi flash-sale system.
+This repository contains the bootstrap and shared contracts for a high-throughput Bookipi flash-sale system.
 
 The source requirements define one configurable sale, one product, limited stock, one item per user, purchase status, purchase results, a React frontend, high throughput, resilience, no overselling, unit and integration tests, stress tests, a system diagram, and implementation documentation.
 
-This increment creates the repository shell and the design record.
-
-No runtime exists yet.
+Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. Business features remain planned.
 
 ## Flow
 
@@ -51,6 +49,7 @@ The package map is:
 - `packages/backend`: Express API, Better Auth, listing setup, reads, Express SQS worker, and order reconciliation.
 - `packages/storefront`: Next.js browser experience.
 - `packages/checkout-processor`: AWS Lambda order creation, hot-path reservation, SQS publication, and mock payment-session creation.
+- `packages/checkout-authorizer`: API Gateway REST REQUEST authorization, planned for a later increment.
 - `docs`: master flow, design facets, test strategy, and implementation roadmap.
 
 The system uses pnpm, Node.js 24, TypeScript, and ECMAScript modules.
@@ -87,13 +86,13 @@ A payment result before SQS leaves the order in `AWAITING_FACTS` and holds the s
 
 Real payment-provider integration is outside this take-home scope.
 
-The separate REST API authorizer will use one of the existing packages. Its package placement and Valkey network setup remain implementation choices.
+The separate REST API authorizer uses `packages/checkout-authorizer`. Its Valkey network setup remains open.
 
 Read the design documents before runtime implementation.
 
 ## Gotchas
 
-This increment has no source directories, dependencies, lockfile, Docker files, runtime configuration, generated diagrams, API server, storefront server, Lambda package, mock payment page, or local service.
+Increment 1 provides an API health route and a static storefront shell. It does not provide sign-in, listing, checkout, payment, or local data services.
 
 The planned local URLs are not available.
 
@@ -114,6 +113,7 @@ Commands in this README must work with this design-only increment.
 - [Backend plan](packages/backend/README.md)
 - [Storefront plan](packages/storefront/README.md)
 - [Checkout processor plan](packages/checkout-processor/README.md)
+- [Checkout authorizer plan](packages/checkout-authorizer/README.md)
 - [Document map](docs/README.md)
 - [System design entry point](docs/system-design.md)
 - [Listing and inventory](docs/listing-and-inventory.md)
@@ -125,18 +125,21 @@ Commands in this README must work with this design-only increment.
 - [Testing strategy](docs/testing-strategy.md)
 - [Implementation roadmap](docs/implementation-roadmap.md)
 
-### Commands that work now
+### Commands
 
 ```sh
 node --version
 pnpm --version
 git status --short --branch
+pnpm install
+pnpm generate:api
+pnpm typecheck
+pnpm test
+pnpm build
 git diff --check
 ```
 
-These commands inspect the current design-only repository.
-
-No install, build, test, dev-server, deployment, or stress-test command exists yet.
+Use Node.js 24 and pnpm 11.20. Set `NEXT_PUBLIC_API_BASE_URL` at build time to configure the static storefront's browser API client. Local service URLs are not defined.
 
 ## Change log
 
@@ -159,4 +162,5 @@ No install, build, test, dev-server, deployment, or stress-test command exists y
 - Serialized callback outcomes by per-order receive sequence and clarified mock buttons after callback quarantine.
 - Defined `stockTotal`, configurable `reserveSlots`, derived `publicStock`, and one Valkey pool for every physical slot.
 - Named the customer-facing cancellation flow slot reallocation after order cancellation; technical release markers keep their names.
+- Added increment 1 package tooling, OpenAPI generation, API bootstrap, and static storefront export.
 - Recorded possible future reliability mitigations without changing the selected runtime design.
