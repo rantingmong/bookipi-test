@@ -1,0 +1,10 @@
+{
+  "name": "@bookipi/storefront",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Planned Next.js storefront for the flash sale.",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

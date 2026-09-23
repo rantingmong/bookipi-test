@@ -1,0 +1,11 @@
+{
+  "name": "bookipi-flash-sale",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Incremental design for a high-throughput Bookipi flash-sale system.",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "type": "module"
+}

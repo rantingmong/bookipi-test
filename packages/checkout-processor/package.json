@@ -1,0 +1,10 @@
+{
+  "name": "@bookipi/checkout-processor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Planned Lambda hot path for atomic Valkey reservation and SQS publication.",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  }
+}
