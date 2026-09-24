@@ -10,21 +10,24 @@ import { orderIdSchema } from '#features/order/schema'
 import { paymentOutcomeSchema } from '#features/payment/schema'
 import type { SessionIdentity } from '#api/middleware/require-session'
 import type { OrdersModel } from '#api/orders/request-context'
+import type { Redis } from 'ioredis'
 
 type OrdersRouterOptions = {
   ordersModel: OrdersModel
   resolveSession: (request: Request) => Promise<SessionIdentity | undefined>
   mockPaymentEnabled: boolean
+  valkey: Redis
 }
 
 export function createOrdersRouter({
   ordersModel,
   resolveSession,
   mockPaymentEnabled,
+  valkey,
 }: OrdersRouterOptions) {
   const router = Router()
 
-  router.use('/orders/:orderId/mock-outcome', (_request, response, next) => {
+  router.use('/orders/:orderId/payment-outcome', (_request, response, next) => {
     if (!mockPaymentEnabled) {
       response.status(404).json({ error: 'Not found', issues: [] })
       return
@@ -38,11 +41,11 @@ export function createOrdersRouter({
       next(new Error('Session middleware did not set an identity'))
       return
     }
-    runWithOrdersRequestContext({ ordersModel, identity }, next)
+    runWithOrdersRequestContext({ ordersModel, identity, valkey }, next)
   })
   router.use('/orders/:orderId', validateRequest('params', orderIdSchema))
   router.use(
-    '/orders/:orderId/mock-outcome',
+    '/orders/:orderId/payment-outcome',
     validateRequest('body', paymentOutcomeSchema),
   )
   router.use(createRouter(ordersHandlers))

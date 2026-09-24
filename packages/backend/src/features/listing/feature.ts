@@ -51,6 +51,18 @@ local orderStatus = ARGV[6]
 if redis.call('HGET', KEYS[1], 'published') ~= '1' then
   return 0
 end
+if orderStatus ~= 'CANCELLED' then
+  return 0
+end
+if redis.call('EXISTS', KEYS[4]) == 1 then
+  if redis.call('HGET', KEYS[4], 'orderId') == orderId and
+    redis.call('HGET', KEYS[4], 'listingId') == listingId and
+    redis.call('HGET', KEYS[4], 'customerId') == rawCustomerId and
+    redis.call('HGET', KEYS[4], 'slotId') == slotId then
+    return 1
+  end
+  return 0
+end
 local orderPrefix = orderId .. ':'
 if redis.call('HGET', KEYS[3], orderPrefix .. 'orderId') ~= orderId then
   return 0
@@ -67,18 +79,17 @@ end
 if redis.call('HGET', KEYS[3], orderPrefix .. 'status') ~= 'PENDING' then
   return 0
 end
-if orderStatus ~= 'CANCELLED' then
-  return 0
-end
-if redis.call('EXISTS', KEYS[4]) == 1 then
-  return 0
-end
 if redis.call('HGET', KEYS[5], activeCustomerField) ~= orderId then
   return 0
 end
 redis.call('HSET', KEYS[3], orderPrefix .. 'status', 'CANCELLED')
 redis.call('RPUSH', KEYS[2], slotId)
-redis.call('HSET', KEYS[4], 'orderId', orderId, 'slotId', slotId)
+redis.call('HSET', KEYS[4],
+  'orderId', orderId,
+  'listingId', listingId,
+  'customerId', rawCustomerId,
+  'slotId', slotId
+)
 redis.call('HDEL', KEYS[5], activeCustomerField)
 return 1
 `

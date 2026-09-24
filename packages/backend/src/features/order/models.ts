@@ -1,6 +1,7 @@
 import {
   activeOrderStatuses,
   orderCollection,
+  orderReleaseStatuses,
   orderStatuses,
 } from '#features/order/constants'
 import type { OrderDocument } from '#features/order/types'
@@ -14,6 +15,7 @@ const orderSchema = new Schema<OrderDocument>(
     listingId: { type: String, required: true },
     slotId: { type: String, required: true },
     status: { type: String, enum: orderStatuses, required: true },
+    releaseStatus: { type: String, enum: orderReleaseStatuses },
   },
   { timestamps: true, versionKey: false },
 )

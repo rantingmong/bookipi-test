@@ -10,6 +10,60 @@ const event = {
 }
 
 describe('order reservation worker', () => {
+  it('reconciles the stored order before acknowledging its SQS message', async () => {
+    const order = {
+      ...event,
+      status: 'CANCELLED',
+      releaseStatus: 'PENDING',
+    }
+    const steps: string[] = []
+    const findOneAndUpdate = vi.fn(async () => order)
+    const updateOne = vi.fn(async () => {
+      steps.push('complete')
+      return { modifiedCount: 1 }
+    })
+    const evalScript = vi.fn(async () => {
+      steps.push('release')
+      return 1
+    })
+    const send = vi.fn(async () => {
+      steps.push('acknowledge')
+      return {}
+    })
+
+    await processSqsBatch(
+      [{ body: JSON.stringify(event), receiptHandle: 'valid' }],
+      { findOneAndUpdate, updateOne } as never,
+      { send } as never,
+      'https://sqs.example/order-events',
+      { eval: evalScript } as never,
+    )
+
+    expect(evalScript).toHaveBeenCalledOnce()
+    expect(steps).toEqual(['release', 'complete', 'acknowledge'])
+  })
+
+  it('leaves a message unacknowledged when guarded release fails', async () => {
+    const findOneAndUpdate = vi.fn(async () => ({
+      ...event,
+      status: 'CANCELLED',
+      releaseStatus: 'PENDING',
+    }))
+    const send = vi.fn()
+
+    await expect(
+      processSqsBatch(
+        [{ body: JSON.stringify(event), receiptHandle: 'retry' }],
+        { findOneAndUpdate, updateOne: vi.fn() } as never,
+        { send } as never,
+        'https://sqs.example/order-events',
+        { eval: vi.fn(async () => 0) } as never,
+      ),
+    ).rejects.toThrow('Guarded slot release failed')
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it('continues after malformed and conflicting messages', async () => {
     const findOneAndUpdate = vi
       .fn()
@@ -19,10 +73,10 @@ describe('order reservation worker', () => {
         status: 'PENDING',
       })
       .mockResolvedValueOnce({
-        orderId: '8f67179c-73c6-49dc-984c-ed1735549d35',
-        customerId: 'customer-001',
-        listingId: 'listing-001',
-        slotId: 'listing-001:slot:0001',
+        orderId: event.orderId,
+        customerId: event.customerId,
+        listingId: event.listingId,
+        slotId: event.slotId,
         status: 'PENDING',
       })
     const send = vi.fn(async () => ({}))
@@ -38,6 +92,7 @@ describe('order reservation worker', () => {
         { findOneAndUpdate } as never,
         { send } as never,
         'https://sqs.example/order-events',
+        { eval: vi.fn(async () => 1) } as never,
       )
 
       expect(findOneAndUpdate).toHaveBeenCalledTimes(2)

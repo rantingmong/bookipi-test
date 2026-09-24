@@ -12,7 +12,9 @@ After SQS accepts the reservation event, the checkout processor starts a payment
 
 The page does not show outcome controls before SQS persistence and owner verification. The build must also set `NEXT_PUBLIC_MOCK_PAYMENT_ENABLED=true` to show the controls. A mock success changes `PENDING` to `COMPLETE`. A mock failure or expiry changes `PENDING` to `CANCELLED`. The owner-checked route accepts `success`, `failure`, or `expired` only when `MOCK_PAYMENT_ENABLED=true` and `NODE_ENV` is `development` or `test`. The disabled route returns `404`.
 
-The backend payment feature applies mock outcomes. A repeated same-result request is safe. A conflicting terminal result returns `409`. Mock cancellation does not release inventory. Provider callbacks, payment reconciliation, and slot release after cancellation remain outside this increment.
+The backend payment feature applies mock outcomes. A repeated request with the same terminal status is safe. Both `failure` and `expired` set `CANCELLED`. A different terminal status returns `409`. Failure or expiry sets `releaseStatus: PENDING` in one atomic document update. The handler calls the order feature to release the slot through guarded Valkey and marks the intent complete only after Valkey confirms success. Provider callback correlation and payment reconciliation remain deferred.
+
+If the process stops after MongoDB stores cancellation and no caller retries, no background sweep repairs the pending release. A payment caller must retry a failed or interrupted outcome request. The guarded Valkey release marker makes a retry safe if Valkey succeeded before MongoDB completion failed.
 
 ## Decisions & assumptions
 
@@ -39,3 +41,4 @@ The order page must wait for the SQS worker to persist the order. A checkout res
 
 - Added the static mock page, owner-checked order APIs, and local or test outcome transitions. Browser and service integration checks remain pending.
 - Added the checkout payment-session feature and returned its redirect URL after SQS acceptance.
+- Added durable cancellation release intents and trigger-driven reconciliation. Provider callback correlation and payment reconciliation remain deferred.

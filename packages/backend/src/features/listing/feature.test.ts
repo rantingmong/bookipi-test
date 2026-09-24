@@ -363,6 +363,8 @@ describe('listing feature', () => {
     )
     expect(script).toContain("redis.call('HGET', KEYS[5], activeCustomerField)")
     expect(script).toContain("redis.call('EXISTS', KEYS[4])")
+    expect(script).toContain("redis.call('HGET', KEYS[4], 'orderId')")
+    expect(script).toContain("redis.call('HGET', KEYS[4], 'slotId')")
     expect(script).toContain("redis.call('HDEL', KEYS[5], activeCustomerField)")
     expect(script).toContain("redis.call('RPUSH', KEYS[2], slotId)")
     expect(evalScript.mock.calls[0]?.[1]).toBe(5)
@@ -381,6 +383,27 @@ describe('listing feature', () => {
       'slot-1',
       'CANCELLED',
     ])
+  })
+
+  it('accepts a matching release marker as an idempotent success', async () => {
+    const evalScript = vi.fn(async (..._args: unknown[]) => 1)
+
+    await expect(
+      releaseCancelledSlot({ eval: evalScript } as never, {
+        listingId: 'sale-1',
+        customerId: 'customer-1',
+        orderId: 'order-1',
+        slotId: 'slot-1',
+        orderStatus: 'CANCELLED',
+      }),
+    ).resolves.toBe(true)
+
+    expect(String(evalScript.mock.calls[0]?.[0])).toContain(
+      "redis.call('HGET', KEYS[4], 'orderId') == orderId",
+    )
+    expect(String(evalScript.mock.calls[0]?.[0])).toContain(
+      "redis.call('HGET', KEYS[4], 'slotId') == slotId",
+    )
   })
 
   it('uses the encoded active-customer field and raw customer identity', async () => {

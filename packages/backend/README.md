@@ -40,9 +40,9 @@ The listing feature validates listing identity, display name, sale window, `rese
 
 The listing feature calls the Valkey client after its MongoDB transaction commits. It seeds and verifies the pool before it publishes the sale. If Valkey fails, the sale remains unpublished and listing creation returns an error.
 
-The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. `orderId` identifies the checkout attempt and slot owner. Its statuses are `PENDING`, `COMPLETE`, and `CANCELLED`. Active partial indexes prevent a customer from holding two active orders for one listing and prevent two active orders from owning one listing slot. The order feature owns reservation persistence and models. The SQS worker inserts new reservation facts as `PENDING`. It uses `$setOnInsert`, so a replay does not overwrite stored facts, timestamps, or terminal status. A conflicting binding fails processing and remains unacknowledged. The payment feature applies local or test outcomes with same-result retry and conflicting-result rejection.
+The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. `orderId` identifies the checkout attempt and slot owner. Its statuses are `PENDING`, `COMPLETE`, and `CANCELLED`. A cancelled order can have release status `PENDING` or `COMPLETE`. Active partial indexes prevent a customer from holding two active orders for one listing and prevent two active orders from owning one listing slot. The order feature owns reservation persistence, models, and per-order release reconciliation. The SQS worker inserts new reservation facts as `PENDING`. It uses `$setOnInsert`, so a replay does not overwrite stored facts, timestamps, terminal status, or release state. A conflicting binding fails processing and remains unacknowledged. The payment feature applies local or test outcomes with same-terminal-status retry and conflicting-status rejection.
 
-The worker long-polls up to ten SQS messages for 20 seconds. It validates each body against the strict `order-reserved.v1` event schema. It deletes each message only after the order upsert succeeds. A MongoDB write error stops polling, closes the API server, and fails the backend process. The queue deployment owns visibility, retry, and dead-letter settings.
+The worker long-polls up to ten SQS messages for 20 seconds. It validates each body against the strict `order-reserved.v1` event schema. It stores the order, reconciles any pending cancellation release, then deletes the message. A reconciliation error leaves the message unacknowledged. A MongoDB write error stops polling, closes the API server, and fails the backend process. The queue deployment owns visibility, retry, and dead-letter settings.
 
 The feature can add a positive integer number of slots to an existing listing. It preserves `reserveSlots` and the listing fields. It counts current slot documents, inserts only the next sequential slot IDs, and returns derived counts in one transaction. Concurrent additions serialize through a write to the listing timestamp. The unique `{ listingId, slotId }` index also rejects a duplicate slot ID.
 
@@ -74,11 +74,11 @@ After SQS accepts the reservation event, Lambda returns the `orderId`, `PENDING`
 
 The worker long-polls SQS directly. The selected design has no SQS-to-Lambda event source mapping.
 
-The current order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. It does not store the client idempotency key. The payment feature applies mock outcomes only from `PENDING`: success sets `COMPLETE`; failure or expiry sets `CANCELLED`. Same-result retries are safe. A conflicting terminal result returns `409`.
+The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. It does not store the client idempotency key. The payment feature applies mock outcomes only from `PENDING`: success sets `COMPLETE`; failure or expiry sets `CANCELLED` and release status `PENDING` in one atomic document update. Same-result retries are safe. A conflicting terminal result returns `409`.
 
 A cancelled order keeps its original `(listingId, customerId, client idempotencyKey)` binding. A new client key can start a new checkout for that customer and listing.
 
-`POST /api/orders/{orderId}/mock-outcome` requires the authenticated order owner and `MOCK_PAYMENT_ENABLED=true` with `NODE_ENV=development` or `NODE_ENV=test`. The route returns `404` when the flag is disabled. It does not release inventory or add payment fields. Provider callbacks, reconciliation, and the release worker remain planned.
+`POST /api/orders/{orderId}/payment-outcome` requires the authenticated order owner and `MOCK_PAYMENT_ENABLED=true` with `NODE_ENV=development` or `NODE_ENV=test`. The route returns `404` when the flag is disabled. It does not add payment fields. Provider callback correlation and reconciliation remain planned.
 
 After SQS persists the order, Express checks the authenticated owner before it shows mock outcome buttons.
 
@@ -102,7 +102,7 @@ MongoDB derives `stockTotal` from slot documents. It does not store `stockTotal`
 
 ## Gotchas
 
-The health endpoint has no business storage. Authentication, listing and slot models, order schema, demo seed, listing Valkey methods, the SQS reservation worker, authenticated order reads, and mock status transitions are implemented. The API has no listing route. Provider reconciliation, slot release after mock cancellation, migrations, and local service URLs are not implemented.
+The health endpoint has no business storage. Authentication, listing and slot models, order schema, demo seed, listing Valkey methods, the SQS reservation worker, authenticated order reads, mock status transitions, and slot release after mock cancellation are implemented. The API has no listing route. Provider reconciliation, migrations, and local service URLs are not implemented.
 
 Do not make Express the hot-path inventory authority.
 
@@ -112,7 +112,7 @@ Delayed SQS events must not reopen a cancelled order.
 
 Provider payment outcome handling remains planned.
 
-The guarded Valkey cancellation release method exists. Mock cancellation does not call it. The durable release worker remains planned.
+The order feature reconciles a pending release after an SQS reservation upsert and after a payment outcome. It uses durable order facts, calls the guarded Valkey release, then marks the intent complete only after Valkey confirms success. A matching Valkey release marker makes retries safe after Valkey succeeds but MongoDB completion fails. If the process stops after MongoDB stores cancellation and no caller retries, no background sweep repairs the pending release. SQS retries when reconciliation fails before acknowledgement. A payment caller must retry a failed or interrupted outcome request. Provider callback correlation and reconciliation remain planned.
 
 Standard SQS can deliver duplicate or out-of-order events. The worker upserts orders by unique `orderId`. It rejects conflicting facts for the same `orderId` and does not acknowledge the message.
 
@@ -150,6 +150,7 @@ The system has no durable replay if Lambda stops after the Valkey pop and before
 - Added dedicated session middleware tests and backend test-driven development guidance.
 - Added Better Auth email/password sign-up and login with MongoDB accounts and Valkey sessions.
 - Added Mongoose-backed listing, slot, and order models with a deterministic listing seed.
+- Added atomic cancellation release intents and trigger-driven guarded-release reconciliation.
 
 ### 2026-09-24
 

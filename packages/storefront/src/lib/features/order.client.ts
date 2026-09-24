@@ -1,4 +1,4 @@
-import { getOrder, postMockOutcome } from '@/lib/api/generated/client'
+import { getOrder, postPaymentOutcome } from '@/lib/api/generated/client'
 import { ApiError } from '@/lib/api/generated/client'
 import type { Order } from '@/lib/api/generated/models'
 
@@ -29,7 +29,7 @@ export async function submitMockPaymentOutcome(
   orderId: string,
   outcome: MockPaymentOutcome,
 ) {
-  return postMockOutcome(orderId, { outcome }, createRequestConfig(baseUrl))
+  return postPaymentOutcome(orderId, { outcome }, createRequestConfig(baseUrl))
 }
 
 export function getOrderPollInterval(order: Order | null | undefined) {

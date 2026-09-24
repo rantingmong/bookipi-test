@@ -1,8 +1,7 @@
+import { createApp, app as defaultApp } from '#app'
+import { readEnvConfig } from '#features/env/feature'
 import type { RequestHandler } from 'express'
 import { describe, expect, it, vi } from 'vitest'
-
-import { app as defaultApp, createApp } from '#app'
-import { readEnvConfig } from '#features/env/feature'
 
 describe('createApp', () => {
   it('passes the raw auth request stream before JSON parsing', async () => {
@@ -138,6 +137,7 @@ describe('createApp', () => {
     const app = createApp({
       ordersModel: { findOne, findOneAndUpdate: async () => null } as never,
       resolveSession: async () => ({ customerId: 'customer-001' }),
+      valkey: { eval: vi.fn() } as never,
     })
     const server = app.listen(0)
     const address = server.address()
@@ -164,6 +164,7 @@ describe('createApp', () => {
       const anonymousApp = createApp({
         ordersModel: { findOne, findOneAndUpdate: async () => null } as never,
         resolveSession: async () => undefined,
+        valkey: { eval: vi.fn() } as never,
       })
       const anonymousServer = anonymousApp.listen(0)
       const anonymousAddress = anonymousServer.address()
@@ -206,18 +207,21 @@ describe('createApp', () => {
       findOne: async () => order,
       findOneAndUpdate: async (
         _filter: unknown,
-        update: { $set: { status: string } },
+        update: { $set: { status: string; releaseStatus?: string } },
       ) => {
         if (status !== 'PENDING') return null
         status = update.$set.status
         return order
       },
+      updateOne: async () => ({ modifiedCount: 1 }),
     }
+    const evalScript = vi.fn(async () => 1)
     const resolver = vi.fn(async () => ({ customerId: 'customer-001' }))
     const disabledApp = createApp({
       ordersModel: ordersModel as never,
       resolveSession: resolver,
       mockPaymentEnabled: false,
+      valkey: { eval: evalScript } as never,
     })
     const disabledServer = disabledApp.listen(0)
     const disabledAddress = disabledServer.address()
@@ -226,7 +230,7 @@ describe('createApp', () => {
 
     try {
       const disabledResponse = await fetch(
-        `http://127.0.0.1:${disabledAddress.port}/api/orders/order-001/mock-outcome`,
+        `http://127.0.0.1:${disabledAddress.port}/api/orders/order-001/payment-outcome`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -252,6 +256,7 @@ describe('createApp', () => {
       ordersModel: ordersModel as never,
       resolveSession: resolver,
       mockPaymentEnabled: true,
+      valkey: { eval: evalScript } as never,
     })
     const enabledServer = enabledApp.listen(0)
     const enabledAddress = enabledServer.address()
@@ -260,7 +265,7 @@ describe('createApp', () => {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${enabledAddress.port}/api/orders/order-001/mock-outcome`,
+        `http://127.0.0.1:${enabledAddress.port}/api/orders/order-001/payment-outcome`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -269,6 +274,7 @@ describe('createApp', () => {
       )
       expect(response.status).toBe(200)
       expect(await response.json()).toMatchObject({ status: 'COMPLETE' })
+      expect(evalScript).not.toHaveBeenCalled()
     } finally {
       await new Promise<void>((resolve, reject) => {
         enabledServer.close((error) => {
@@ -279,8 +285,9 @@ describe('createApp', () => {
     }
   })
 
-  it('accepts expiry, retries the same result, and rejects a conflict', async () => {
+  it('accepts failure and retries expiry as the same terminal status', async () => {
     let status = 'PENDING'
+    let releaseStatus: string | undefined
     const order = {
       orderId: 'order-expire',
       customerId: 'customer-001',
@@ -289,6 +296,9 @@ describe('createApp', () => {
       get status() {
         return status
       },
+      get releaseStatus() {
+        return releaseStatus
+      },
       createdAt: new Date('2026-09-24T00:00:00.000Z'),
       updatedAt: new Date('2026-09-24T00:00:00.000Z'),
     }
@@ -296,17 +306,27 @@ describe('createApp', () => {
       findOne: async () => order,
       findOneAndUpdate: async (
         _filter: unknown,
-        update: { $set: { status: string } },
+        update: { $set: { status: string; releaseStatus?: string } },
       ) => {
         if (status !== 'PENDING') return null
         status = update.$set.status
+        releaseStatus = update.$set.releaseStatus
         return order
       },
+      updateOne: async (
+        _filter: unknown,
+        update: { $set: { releaseStatus: string } },
+      ) => {
+        releaseStatus = update.$set.releaseStatus
+        return { modifiedCount: 1 }
+      },
     }
+    const evalScript = vi.fn(async () => 1)
     const app = createApp({
       ordersModel: ordersModel as never,
       resolveSession: async () => ({ customerId: 'customer-001' }),
       mockPaymentEnabled: true,
+      valkey: { eval: evalScript } as never,
     })
     const server = app.listen(0)
     const address = server.address()
@@ -316,7 +336,7 @@ describe('createApp', () => {
 
     async function submit(outcome: unknown) {
       return fetch(
-        `http://127.0.0.1:${port}/api/orders/order-expire/mock-outcome`,
+        `http://127.0.0.1:${port}/api/orders/order-expire/payment-outcome`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -327,13 +347,16 @@ describe('createApp', () => {
 
     try {
       expect((await submit('invalid')).status).toBe(400)
-      const expired = await submit('expired')
-      expect(expired.status).toBe(200)
-      expect(await expired.json()).toMatchObject({ status: 'CANCELLED' })
+      const failure = await submit('failure')
+      expect(failure.status).toBe(200)
+      expect(await failure.json()).toMatchObject({ status: 'CANCELLED' })
+      expect(releaseStatus).toBe('COMPLETE')
+      expect(evalScript).toHaveBeenCalledOnce()
 
       const retry = await submit('expired')
       expect(retry.status).toBe(200)
       expect(await retry.json()).toMatchObject({ status: 'CANCELLED' })
+      expect(evalScript).toHaveBeenCalledOnce()
 
       const conflict = await submit('success')
       expect(conflict.status).toBe(409)

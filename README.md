@@ -34,9 +34,9 @@ The Express SQS worker long-polls SQS, validates each strict `order-reserved.v1`
 
 The `/payment?orderId=...` page waits for MongoDB persistence, then uses an authenticated order read before it shows outcome controls. The owner can submit a mock success or failure in local or test mode.
 
-The current order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. The payment feature applies mock outcomes. Provider callbacks, reconciliation, and the release worker remain planned work. The guarded Valkey release method exists.
+The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. The payment feature applies mock outcomes. Provider callback correlation and payment reconciliation remain planned. The order feature reconciles cancellation releases through the guarded Valkey method after each reservation batch item and payment outcome.
 
-After SQS supplies and validates the immutable binding, the first valid correlated payment outcome wins. A failure or expiry changes the order to `CANCELLED` and creates a pending release intent in one MongoDB transaction. Slot reallocation after order cancellation means that an Express worker returns the slot to the Valkey pool. A later checkout can claim it. The worker first verifies ownership and retries the guarded Valkey operation; the slot is not available immediately.
+After SQS supplies and validates the immutable binding, the first valid correlated payment outcome wins. A failure or expiry changes the order to `CANCELLED` and creates a pending release intent in the same MongoDB document update. The caller then verifies the durable order facts, returns the slot through the guarded Valkey operation, and marks the release complete. A matching release marker makes a retry safe after Valkey succeeds but MongoDB completion fails. If the process stops after cancellation and no caller retries, no background sweep repairs the pending release. SQS retries when reconciliation fails before acknowledgement. A payment caller must retry a failed or interrupted outcome request. A later checkout can claim a released slot.
 
 The design has no durable replay for a Lambda crash after the Valkey pop and before SQS accepts the event.
 
@@ -82,7 +82,7 @@ The unique indexes allow one `PENDING` or `COMPLETE` order per customer and list
 
 A failed or expired payment releases the slot for a new checkout with a new idempotency key.
 
-Provider callback correlation, reconciliation, and the cancellation release worker remain planned. The current order model has no payment fact fields. Mock outcomes change only the order status and do not release inventory.
+Provider callback correlation and reconciliation remain planned. The order model has no payment-provider fact fields. Mock cancellation records the durable release intent, and the SQS or payment caller returns the slot to Valkey.
 
 Real payment-provider integration is outside this take-home scope.
 
@@ -177,3 +177,4 @@ The backend uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its
 - Added the checkout Lambda handler, tuple-scoped Valkey reservation, and SQS publication for increment 4.
 - Added the Express SQS worker and idempotent MongoDB persistence for increment 5. AWS SQS and MongoDB integration checks remain pending.
 - Implemented the static mock payment page, authenticated order reads, post-SQS redirect creation, and local or test payment outcomes for increment 6. Browser, MongoDB, SQS, and deployment checks remain pending.
+- Added trigger-driven mock cancellation release reconciliation with guarded Valkey marker recovery. MongoDB and Valkey integration checks remain pending.

@@ -16,7 +16,7 @@ The backend SQS worker consumes the event and writes immutable reservation facts
 
 After SQS accepts the reservation event, the checkout processor creates a relative mock payment redirect from `orderId` and includes it in the HTTP 202 response. The mock payment page uses that order ID after the backend persists the SQS event. The backend checks ownership before it returns the order or applies a local or test payment outcome. Provider callbacks remain planned.
 
-The backend order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. The payment feature changes `PENDING` to `COMPLETE` or `CANCELLED`. Provider reconciliation and the release worker remain planned.
+The backend order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. The payment feature changes `PENDING` to `COMPLETE` or `CANCELLED`. The order feature reconciles durable cancellation release intents through guarded Valkey operations after reservation and payment outcomes. Provider reconciliation remains planned.
 
 A cancelled customer can start a new checkout with a new client key for the same listing. Valkey keeps the key mapping. MongoDB upserts SQS events by `orderId`.
 
@@ -35,7 +35,7 @@ Standard SQS can duplicate and reorder events. The worker processes them idempot
 - `checkout-authorizer` owns the separate API Gateway REST REQUEST authorizer.
 - Valkey scopes idempotency by listing, authorizer-derived customer, and client key.
 - All packages use TypeScript and ECMAScript modules.
-- Increment 1 adds runtime bootstraps for the backend and storefront. Increment 2 adds email/password authentication and listing/order model foundations. Increment 3 adds verified Valkey publication and guarded inventory methods. Increment 4 adds the checkout Lambda handler and SQS publication. Increment 5 adds the Express SQS consumer and durable reservation facts. Increment 6 adds the static mock payment page, the payment-session redirect, owner-checked order routes, and payment outcomes. Sale routes, provider reconciliation, and the release worker remain planned.
+- Increment 1 adds runtime bootstraps for the backend and storefront. Increment 2 adds email/password authentication and listing/order model foundations. Increment 3 adds verified Valkey publication and guarded inventory methods. Increment 4 adds the checkout Lambda handler and SQS publication. Increment 5 adds the Express SQS consumer and durable reservation facts. Increment 6 adds the static mock payment page, the payment-session redirect, owner-checked order routes, and payment outcomes. Increment 7 adds durable cancellation release and bounded worker retries. Sale routes and provider reconciliation remain planned.
 
 ## Gotchas
 
@@ -79,3 +79,4 @@ Read each package README before changing that package.
 - Added the Express SQS reservation worker and durable order upsert.
 - Added authenticated order reads and local or test mock outcomes for the static payment page.
 - Added payment feature boundaries and the checkout response redirect to the mock payment page.
+- Added trigger-driven cancellation release reconciliation and guarded Valkey marker recovery.

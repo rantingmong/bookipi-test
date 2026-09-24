@@ -30,7 +30,8 @@ Current tests cover:
 - Checkout processor environment validation and lazy runtime client creation.
 - Atomic inventory claim script boundaries, tuple-scoped key selection, sale window outcomes, active-order rejection, and cancellation outcomes.
 - Order worker environment validation, SQS long-poll settings, strict event validation, acknowledgement command, reservation upsert replay, timestamp and terminal-status preservation, and conflicting-fact rejection.
-- Payment outcome validation, atomic `PENDING` transitions, same-result retry, conflicting terminal rejection, local or test environment gating, owner checks, expiry handling, and order reads.
+- Payment outcome validation, atomic `PENDING` transitions, same-terminal-status retry (including `failure` followed by `expired`), conflicting terminal rejection, local or test environment gating, owner checks, expiry handling, and order reads.
+- Durable cancellation release state, guarded Valkey marker replay, trigger-driven reconciliation after SQS and payment outcomes, and completion only after Valkey success.
 
 These tests do not prove MongoDB or Valkey integration.
 
@@ -54,7 +55,7 @@ LocalStack tests will cover SQS delivery, duplicate messages, retry behavior, an
 
 Playwright will verify sign-up, sign-in, session display, listing display, one purchase, same-key retry, sold-out response, and purchase result reads.
 
-The `/payment?orderId=...` page polls until the SQS worker persists the order. It shows outcome controls only after the authenticated API confirms ownership. Browser tests will verify pending, owner-not-found, request error, success, and cancellation states. Provider callbacks and slot release remain planned work.
+The `/payment?orderId=...` page polls until the SQS worker persists the order. It shows outcome controls only after the authenticated API confirms ownership. Browser tests will verify pending, owner-not-found, request error, success, and cancellation states. Provider callback correlation remains planned work.
 
 Deployment checks will verify CloudFront routing, session-cookie forwarding, `Origin` forwarding, authorizer-result caching, and checkout response caching. Cross-origin deployments will verify credentialed CORS and unauthenticated preflight behavior.
 
@@ -75,6 +76,8 @@ k6 will test concurrent claims, repeated idempotency tuples, requests around the
 | Active customer ownership | At most one `PENDING` or `COMPLETE` order exists for a listing and customer.                                                             |
 | Active slot ownership     | At most one `PENDING` or `COMPLETE` order exists for a listing and slot.                                                                 |
 | Cancellation              | A `CANCELLED` order does not block a later checkout for the same listing and customer.                                                   |
+| Cancellation release      | A failure or expiry stores the release intent with cancellation. A matching Valkey marker can be retried without adding the slot twice.  |
+| Release completion        | The order feature marks release complete only after Valkey success. A rejected SQS release remains unacknowledged for retry.             |
 | SQS idempotency           | Replaying the same order event does not create another order or change its immutable facts, status, or timestamps.                       |
 | Valkey claim              | An atomic claim assigns each available slot to at most one order.                                                                        |
 | Sale window               | No request outside the active window creates a claim.                                                                                    |
@@ -102,3 +105,5 @@ Increment 4 and 5 unit tests do not prove atomic Valkey behavior, SQS delivery, 
 - Added Mongoose timestamp and worker polling failure checks. AWS and MongoDB integration checks remain pending.
 - Added mock outcome, owner check, expiry, polling client wrapper, and static payment page checks. Browser and service integration checks remain pending.
 - Added payment-session redirect and post-SQS checkout tests. Browser and service integration checks remain pending.
+- Added durable release intent, idempotent Valkey marker, and trigger-driven reconciliation checks. MongoDB and Valkey integration checks remain pending.
+- Added guarded-release failure retry and `failure`/`expired` same-status retry checks.

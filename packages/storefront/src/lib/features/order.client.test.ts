@@ -54,7 +54,7 @@ describe('order client', () => {
     )
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.example.test/api/orders/order-001/mock-outcome',
+      'https://api.example.test/api/orders/order-001/payment-outcome',
       expect.objectContaining({
         method: 'POST',
         credentials: 'include',

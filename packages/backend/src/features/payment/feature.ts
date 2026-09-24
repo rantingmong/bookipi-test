@@ -1,6 +1,6 @@
+import type { OrderDocument } from '#features/order/types'
 import { paymentOutcomeSchema } from '#features/payment/schema'
 import type { PaymentOrderModel, PaymentOutcome } from '#features/payment/types'
-import type { OrderDocument } from '#features/order/types'
 
 export { paymentOutcomeSchema }
 
@@ -17,15 +17,18 @@ export async function applyPaymentOutcome(
   outcome: PaymentOutcome,
 ): Promise<OrderDocument | null> {
   let status: OrderDocument['status']
+  let update: { $set: Partial<OrderDocument> }
   if (outcome === 'success') {
     status = 'COMPLETE'
+    update = { $set: { status } }
   } else {
     status = 'CANCELLED'
+    update = { $set: { status, releaseStatus: 'PENDING' } }
   }
 
   const updated = await ordersModel.findOneAndUpdate(
     { orderId, status: 'PENDING' },
-    { $set: { status } },
+    update,
     { returnDocument: 'after' },
   )
   if (updated) {

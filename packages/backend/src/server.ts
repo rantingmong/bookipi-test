@@ -50,6 +50,7 @@ async function prepare() {
       auth,
       config,
       orderModel,
+      valkey,
       worker,
       shutdown,
     }
@@ -63,6 +64,7 @@ async function startServer({
   auth,
   config,
   orderModel,
+  valkey,
   shutdown,
 }: Awaited<ReturnType<typeof prepare>>) {
   try {
@@ -73,6 +75,7 @@ async function startServer({
       resolveSession: (request) =>
         resolveSessionIdentity(auth, request.headers),
       mockPaymentEnabled: config.mockPaymentEnabled,
+      valkey: valkey.client,
     })
     const port = Number(process.env.PORT ?? 3001)
     const server = await listenHttpServer(app, port)
@@ -87,6 +90,7 @@ async function startServer({
 
 async function startWorker({
   orderModel,
+  valkey,
   worker,
 }: Awaited<ReturnType<typeof prepare>>) {
   while (!worker.shouldStop()) {
@@ -96,6 +100,7 @@ async function startWorker({
       orderModel.OrdersModel,
       worker.sqs,
       worker.queueUrl,
+      valkey.client,
     )
   }
 }

@@ -137,11 +137,11 @@ Selection recorded by this design: Angle A. Lambda creates `orderId` before the 
 
 Reason: the page uses the existing order identity without adding a second local service.
 
-Local verification covers API generation, order reads, owner checks, disabled-route behavior, payment redirect creation, success, failure, expiry, same-result retries, conflicting outcomes, the storefront client wrapper, type checks, package tests, static export, formatting, and diff checks. Provider callbacks remain outside this increment.
+Local verification covers API generation, order reads, owner checks, disabled-route behavior, payment redirect creation, success, failure, expiry, same-terminal-status retries, conflicting outcomes, the storefront client wrapper, type checks, package tests, static export, formatting, and diff checks. Provider callbacks remain outside this increment.
 
 ## Increment 7: unified order reconciliation and durable slot release
 
-Status: awaiting review.
+Status: implemented and locally verified. MongoDB and Valkey integration evidence remains pending.
 
 Angle A: apply payment outcomes to the order status after the SQS worker persists the order. Use `orderId` as the slot owner and return a cancelled slot through a guarded Valkey release.
 
@@ -151,7 +151,7 @@ Selection recorded by this design: Angle A.
 
 Reason: order status and slot ownership use one stable order identifier.
 
-Planned verification: duplicate SQS events, status transitions, cancellation release, worker retry after crashes, new checkout after cancellation, active partial-index rejection, and `orderId` slot ownership. Provider callback correlation and reconciliation remain deferred.
+Local verification covers duplicate SQS events, status transitions, cancellation release intents, trigger-driven reconciliation after SQS and payment outcomes, and marker idempotency. MongoDB and Valkey integration must still verify ownership, duplicate release, new checkout after cancellation, and active partial-index behavior. There is no background release sweep. SQS retries when reconciliation fails before acknowledgement. A payment caller must retry a failed or interrupted outcome request. Provider callback correlation and reconciliation remain deferred.
 
 ## Increment 8: storefront purchase experience
 

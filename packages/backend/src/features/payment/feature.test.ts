@@ -1,12 +1,12 @@
-import { describe, expect, it, vi } from 'vitest'
 import {
   applyPaymentOutcome,
   PaymentOutcomeConflictError,
   paymentOutcomeSchema,
 } from '#features/payment/feature'
+import { describe, expect, it, vi } from 'vitest'
 
 describe('payment feature', () => {
-  it('applies success and accepts the same outcome on retry', async () => {
+  it('applies success and accepts the same terminal status on retry', async () => {
     const complete = { orderId: 'order-001', status: 'COMPLETE' }
     const findOneAndUpdate = vi.fn(async () => complete)
     const findOne = vi.fn(async () => complete)
@@ -41,12 +41,63 @@ describe('payment feature', () => {
 
       expect(findOneAndUpdate).toHaveBeenCalledWith(
         { orderId: 'order-001', status: 'PENDING' },
-        { $set: { status: 'CANCELLED' } },
+        {
+          $set: { status: 'CANCELLED', releaseStatus: 'PENDING' },
+        },
         { returnDocument: 'after' },
       )
       expect(findOne).not.toHaveBeenCalled()
     },
   )
+
+  it('keeps a pending or completed release intent on a same-status retry', async () => {
+    for (const releaseStatus of ['PENDING', 'COMPLETE'] as const) {
+      const cancelled = {
+        orderId: 'order-001',
+        status: 'CANCELLED',
+        releaseStatus,
+      }
+      const findOneAndUpdate = vi.fn(async () => null)
+      const findOne = vi.fn(async () => cancelled)
+
+      await expect(
+        applyPaymentOutcome(
+          { findOneAndUpdate, findOne } as never,
+          'order-001',
+          'failure',
+        ),
+      ).resolves.toEqual(cancelled)
+      expect(findOneAndUpdate).toHaveBeenCalledOnce()
+      expect(findOne).toHaveBeenCalledOnce()
+    }
+  })
+
+  it('accepts failure and expiry as the same CANCELLED terminal status', async () => {
+    const cancelled = {
+      orderId: 'order-001',
+      status: 'CANCELLED',
+      releaseStatus: 'PENDING',
+    }
+    const findOneAndUpdate = vi
+      .fn()
+      .mockResolvedValueOnce(cancelled)
+      .mockResolvedValueOnce(null)
+    const findOne = vi.fn(async () => cancelled)
+    const model = { findOneAndUpdate, findOne }
+
+    await expect(
+      applyPaymentOutcome(model as never, 'order-001', 'failure'),
+    ).resolves.toEqual(cancelled)
+    await expect(
+      applyPaymentOutcome(model as never, 'order-001', 'expired'),
+    ).resolves.toEqual(cancelled)
+    expect(findOneAndUpdate).toHaveBeenNthCalledWith(
+      2,
+      { orderId: 'order-001', status: 'PENDING' },
+      { $set: { status: 'CANCELLED', releaseStatus: 'PENDING' } },
+      { returnDocument: 'after' },
+    )
+  })
 
   it('rejects a different terminal outcome and validates the strict request body', async () => {
     const findOneAndUpdate = vi.fn(async () => null)

@@ -12,12 +12,15 @@ stateDiagram-v2
     PENDING --> COMPLETE: payment succeeds
     PENDING --> CANCELLED: payment fails or expires
     COMPLETE --> [*]
-    CANCELLED --> [*]
+    CANCELLED --> [*]: releaseStatus COMPLETE
+    CANCELLED --> CANCELLED: releaseStatus PENDING
 ```
 
-The order stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. The SQS worker validates `order-reserved.v1` and inserts its immutable facts with status `PENDING`. `GET /api/orders/{orderId}` returns the order only to its authenticated owner. It returns `404` for an absent or non-owned order. The mock payment page acts on `orderId` after the worker persists the order.
+The order stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. The SQS worker validates `order-reserved.v1` and inserts its immutable facts with status `PENDING`. `GET /api/orders/{orderId}` returns the order only to its authenticated owner. It returns `404` for an absent or non-owned order. The mock payment page acts on `orderId` after the worker persists the order.
 
-In local or test mode, the payment feature handles `POST /api/orders/{orderId}/mock-outcome`. It changes only a `PENDING` order. Success sets `COMPLETE`. Failure or expiry sets `CANCELLED`. The same outcome can be retried. A different terminal result returns `409`. This transition does not release a slot.
+In local or test mode, the payment feature handles `POST /api/orders/{orderId}/payment-outcome`. It changes only a `PENDING` order. Success sets `COMPLETE`. Failure or expiry sets `CANCELLED` and `releaseStatus: PENDING` in one atomic order update. Either `failure` or `expired` can retry the same `CANCELLED` terminal status. A different terminal status returns `409`. After an SQS upsert or payment outcome, the order feature checks that returned durable order. If release is pending, it calls guarded Valkey release and marks it complete only after success.
+
+If the process stops after MongoDB stores cancellation and no caller retries, no background sweep repairs the pending release. SQS retries when reconciliation fails before acknowledgement. A payment caller must retry a failed or interrupted outcome request.
 
 The worker uses `$setOnInsert` by `orderId`. A replay cannot change an existing customer, listing, slot, status, or timestamp. If an event has different facts for the same order, the worker fails processing and leaves the message unacknowledged. A delayed event cannot reopen a `COMPLETE` or `CANCELLED` order.
 
@@ -26,7 +29,7 @@ The worker uses `$setOnInsert` by `orderId`. A replay cannot change an existing 
 ## Decisions & assumptions
 
 - Every order has a unique `orderId`.
-- The model defines `PENDING`, `COMPLETE`, and `CANCELLED` statuses.
+- The model defines `PENDING`, `COMPLETE`, and `CANCELLED` statuses. A cancelled order has an optional release state of `PENDING` or `COMPLETE`.
 - A unique partial `{ listingId: 1, customerId: 1 }` index covers `PENDING` and `COMPLETE` orders. Its filter requires both indexed fields to exist.
 - A unique partial `{ listingId: 1, slotId: 1 }` index covers `PENDING` and `COMPLETE` orders. Its filter requires both indexed fields to exist.
 - The active indexes exclude `CANCELLED` so a later checkout can use the same listing and slot.
@@ -35,7 +38,7 @@ The worker uses `$setOnInsert` by `orderId`. A replay cannot change an existing 
 - The unique `orderId` index provides idempotent order creation. Conflicting immutable facts fail closed.
 - The mock outcome route requires `MOCK_PAYMENT_ENABLED=true` and `NODE_ENV=development` or `NODE_ENV=test`. It returns `404` when disabled.
 - The payment feature owns mock outcome transitions. The order feature owns reservation facts and the order model.
-- Provider callbacks, payment reconciliation, and release reconciliation remain planned work.
+- Provider callback correlation and payment reconciliation remain planned work.
 
 ## Gotchas
 
@@ -55,4 +58,5 @@ The queue deployment must set a dead-letter policy for messages that keep failin
 ### 2026-09-24
 
 - Added idempotent persistence for immutable reservation facts from SQS.
-- Added authenticated reads and atomic payment outcome transitions. Provider reconciliation and slot release remain pending.
+- Added authenticated reads and atomic payment outcome transitions.
+- Added atomic cancellation release intents and trigger-driven guarded release.
