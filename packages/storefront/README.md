@@ -30,13 +30,13 @@ CloudFront will route the request through API Gateway to the checkout Lambda. Ex
 
 The storefront will show accepted, retryable, sold-out, and completed purchase states.
 
-The listing advertises `publicStock = stockTotal - reserveSlots`. Checkout reports sold out only when Valkey has no claimable slot. The wording for the live count when public remaining reaches zero before the Valkey pool is empty remains open.
+The listing advertises the slot-document count minus `reserveSlots`. Checkout reports sold out only when Valkey has no claimable slot.
 
-A future mock payment page will show a pending state until the Express SQS worker stores the MongoDB session binding. It will show success and failure buttons only after Express checks the authenticated owner against that binding.
+A future mock payment page will show a pending state until the Express SQS worker stores the MongoDB order. It will use `orderId` and show success and failure buttons only after Express checks the authenticated owner.
 
-The mock page will call the owner-checked, local or test-only outcome route after the binding exists.
+The mock page will call the owner-checked, local or test-only outcome route after the order exists.
 
-Express will translate the browser outcome into the provider-shaped callback handler. The browser will not call the service-authenticated callback route.
+The page acts on `orderId`. Provider callback handling remains planned.
 
 The page requires the authenticated order owner and a local or test-only feature flag.
 
@@ -46,7 +46,7 @@ The backend disables the mock outcome route outside local and test environments.
 
 - The storefront uses Next.js.
 - The storefront does not reserve inventory directly.
-- `publicStock` is the advertised listing count. The storefront does not treat it as the true physical slot count or the sold-out authority.
+- The listing's displayed total comes from slot documents. The storefront does not treat that count as the sold-out authority.
 - The storefront does not write MongoDB or Valkey.
 - The browser does not send its purchase request to Express.
 - The API Gateway REST REQUEST Lambda authorizer checks the Better Auth session in Valkey and supplies trusted `customerId`. The browser cannot set the trusted identity.
@@ -60,8 +60,6 @@ The storefront has sign-up and login pages. Listing, purchase, and result screen
 Do not use React Router for this package.
 
 Do not treat a client response as durable order proof until the backend reports the persisted result.
-
-The payment page uses provider metadata for correlation only. The backend remains the authorization boundary.
 
 The browser cannot self-assert payment success in a real deployment.
 

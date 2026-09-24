@@ -16,7 +16,10 @@ const { redisClient, createRedis, redisStorage } = vi.hoisted(() => {
 vi.mock('ioredis', () => ({ Redis: createRedis }))
 vi.mock('@better-auth/redis-storage', () => ({ redisStorage }))
 
-import { authSessionKeyPrefix, createValkeyService } from './client.js'
+import {
+  authSessionKeyPrefix,
+  createValkeyService,
+} from '#services/valkey/client'
 
 describe('Valkey auth client', () => {
   beforeEach(() => vi.clearAllMocks())

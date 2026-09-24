@@ -2,7 +2,7 @@ import express from 'express'
 import type { RequestHandler } from 'express'
 
 import { apiRouter } from '#api/router'
-import { corsMiddleware } from './api/middleware/cors.js'
+import { corsMiddleware } from '#api/middleware/cors'
 
 type AppOptions = { authHandler?: RequestHandler; storefrontOrigin?: string }
 

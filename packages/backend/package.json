@@ -14,10 +14,21 @@
       "development": "./src/api/*.ts",
       "types": "./src/api/*.ts",
       "default": "./dist/api/*.js"
+    },
+    "#features/*": {
+      "development": "./src/features/*.ts",
+      "types": "./src/features/*.ts",
+      "default": "./dist/features/*.js"
+    },
+    "#services/*": {
+      "development": "./src/services/*.ts",
+      "types": "./src/services/*.ts",
+      "default": "./dist/services/*.js"
     }
   },
   "scripts": {
     "dev": "node --conditions=development --import tsx --watch src/server.ts",
+    "seed": "node --conditions=development --import tsx src/seed.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -33,6 +44,7 @@
     "express": "5.1.0",
     "ioredis": "^5.11.1",
     "mongodb": "^7.6.0",
+    "mongoose": "9.10.2",
     "zod": "4.1.12"
   },
   "devDependencies": {

@@ -3,10 +3,12 @@ import { createApp } from '#app'
 import {
   createAuthFeature,
   createMongoAuthAdapter,
-} from './features/auth/feature.js'
-import { readEnvConfig } from './features/env/feature.js'
-import { createMongoService } from './services/mongodb/client.js'
-import { createValkeyService } from './services/valkey/client.js'
+} from '#features/auth/feature'
+import { readEnvConfig } from '#features/env/feature'
+import { createListingModels } from '#features/listing/models'
+import { createOrderModel } from '#features/order/models'
+import { createMongoService } from '#services/mongodb/client'
+import { createValkeyService } from '#services/valkey/client'
 
 async function startServer() {
   const config = readEnvConfig()
@@ -15,7 +17,14 @@ async function startServer() {
   const valkey = createValkeyService(config.valkeyUrl)
 
   try {
-    await Promise.all([mongo.client.connect(), valkey.client.connect()])
+    await Promise.all([mongo.connect(), valkey.client.connect()])
+    const listingModels = createListingModels(mongo.connection)
+    const orderModel = createOrderModel(mongo.connection)
+    await Promise.all([
+      listingModels.ListingModel.init(),
+      listingModels.ListingSlotModel.init(),
+      orderModel.init(),
+    ])
     const auth = createAuthFeature({
       config,
       database: createMongoAuthAdapter(mongo.database, mongo.client),
@@ -31,7 +40,7 @@ async function startServer() {
       process.stdout.write(`Backend listening on port ${port}\n`)
     })
   } catch (error) {
-    await Promise.allSettled([mongo.client.close(), valkey.client.quit()])
+    await Promise.allSettled([mongo.close(), valkey.client.quit()])
     throw error
   }
 }
