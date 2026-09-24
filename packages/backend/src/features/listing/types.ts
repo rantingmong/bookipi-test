@@ -1,4 +1,3 @@
-import type { Connection, Model } from 'mongoose'
 import type { listingInputSchema } from '#features/listing/schema'
 import type { z } from 'zod'
 
@@ -19,13 +18,4 @@ export type ListingSlotDocument = {
   customerId?: string
   createdAt?: Date
   updatedAt?: Date
-}
-
-export type ListingModels = {
-  ListingModel: Model<ListingDocument>
-  ListingSlotModel: Model<ListingSlotDocument>
-}
-
-export type ListingCreationDependencies = ListingModels & {
-  connection: Pick<Connection, 'startSession'>
 }

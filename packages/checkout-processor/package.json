@@ -2,8 +2,20 @@
   "name": "@bookipi/checkout-processor",
   "version": "0.0.0",
   "private": true,
-  "description": "Planned Lambda hot path for atomic Valkey reservation and SQS publication.",
+  "description": "Lambda hot path for atomic Valkey inventory claims.",
   "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ioredis": "^5.11.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.5.2",
+    "typescript": "5.9.2",
+    "vitest": "3.2.4"
+  },
   "engines": {
     "node": ">=24 <25"
   }

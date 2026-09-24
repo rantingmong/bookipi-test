@@ -22,7 +22,8 @@ Current tests cover:
 - Listing and slot collection names and required indexes.
 - Required order fields, statuses, unique order ID, and active customer/listing and listing/slot indexes.
 - Order input rejects `idempotencyKey`. MongoDB does not store the key.
-- Repeat-safe listing and slot seed upserts.
+- Demo seed uses listing creation and publishes ten Valkey slots.
+- Valkey seed and publication calls, post-transaction order, claim script boundaries, and guarded release calls.
 - Better Auth configuration, session storage, identity mapping, Express request order, CORS, and storefront auth calls.
 
 These tests do not prove MongoDB or Valkey integration.
@@ -74,7 +75,7 @@ k6 will test concurrent claims, repeated idempotency tuples, requests around the
 
 ## Expected results
 
-The current seed creates one listing with `reserveSlots: 2` and ten available slot documents. Reads derive 10 total slots and 8 public slots. The seed does not create orders or publish Valkey state.
+The current seed creates one listing with `reserveSlots: 2` and ten available slot documents. Reads derive 10 total slots and 8 public slots. The seed publishes Valkey inventory and does not create orders. A repeat run with the same listing ID fails.
 
 This increment has no measured load values. Later increments will define service targets after the local baseline and deployment shape are known.
 

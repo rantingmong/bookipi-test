@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readEnvConfig, readMongoEnvConfig } from '#features/env/feature'
+import { readEnvConfig, readListingSeedEnvConfig } from '#features/env/feature'
 
 const environment = {
   BETTER_AUTH_URL: 'http://localhost:3001',
@@ -10,17 +10,24 @@ const environment = {
 }
 
 describe('environment feature', () => {
-  it('reads only Mongo settings for the seed command', () => {
+  it('requires MongoDB and Valkey settings for the seed command', () => {
     expect(
-      readMongoEnvConfig({
+      readListingSeedEnvConfig({
         MONGODB_URI: environment.MONGODB_URI,
         MONGODB_DATABASE: environment.MONGODB_DATABASE,
+        VALKEY_URL: environment.VALKEY_URL,
       }),
     ).toEqual({
       mongoUri: environment.MONGODB_URI,
       mongoDatabase: environment.MONGODB_DATABASE,
+      valkeyUrl: environment.VALKEY_URL,
     })
-    expect(() => readMongoEnvConfig({})).toThrow()
+    expect(() =>
+      readListingSeedEnvConfig({
+        MONGODB_URI: environment.MONGODB_URI,
+        MONGODB_DATABASE: environment.MONGODB_DATABASE,
+      }),
+    ).toThrow('Missing required environment variable VALKEY_URL')
   })
 
   it('validates required settings and accepts only an exact optional storefront origin', () => {

@@ -5,6 +5,11 @@
   "description": "Express API and durable sale services.",
   "type": "module",
   "imports": {
+    "#types": {
+      "development": "./src/types.ts",
+      "types": "./src/types.ts",
+      "default": "./dist/types.js"
+    },
     "#app": {
       "development": "./src/app.ts",
       "types": "./src/app.ts",

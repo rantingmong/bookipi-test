@@ -16,6 +16,8 @@ The backend requires `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `MONGODB_URI`, `MO
 
 Set `STOREFRONT_ORIGIN` when the storefront uses a different origin.
 
+The demo seed command requires `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL`. It does not require Better Auth settings.
+
 ## Tests
 
-`feature.test.ts` checks required settings and exact-origin validation.
+`feature.test.ts` checks server and demo seed settings and exact-origin validation.

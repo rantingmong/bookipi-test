@@ -16,7 +16,7 @@ The backend consumes the event and writes the durable order fields to MongoDB. M
 
 The mock payment page uses `orderId` after the backend persists the SQS event. Payment callbacks remain planned.
 
-The backend order model stores `orderId`, `customerId`, `listingId`, `slotId`, and `status`. Order transitions and cancelled-slot release remain planned.
+The backend order model stores `orderId`, `customerId`, `listingId`, `slotId`, and `status`. Order transitions and the release worker remain planned.
 
 A cancelled customer can start a new checkout with a new client key for the same listing. Valkey keeps the key mapping. MongoDB upserts SQS events by `orderId`.
 
@@ -26,20 +26,20 @@ Standard SQS can duplicate and reorder events. The worker processes them idempot
 
 ## Decisions & assumptions
 
-- `backend` owns Express API behavior, Better Auth, listing and slot models, order storage, and durable persistence. MongoDB stores users and credentials; Better Auth sessions use Valkey secondary storage.
-- `backend` uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its source uses the `#app`, `#api/*`, `#features/*`, and `#services/*` package imports.
+- `backend` owns Express API behavior, Better Auth, listing and slot models, order storage, and durable persistence. MongoDB stores users and credentials; Better Auth sessions use Valkey secondary storage. Listing creation seeds, verifies, and publishes its Valkey pool after the MongoDB transaction commits.
+- `backend` uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its source uses the `#app`, `#api/*`, `#features/*`, `#services/*`, and `#types` package imports.
 - `storefront` owns the Next.js user interface.
-- `checkout-processor` owns Lambda order creation, the hot path for reservation, and SQS publication.
+- `checkout-processor` owns Lambda order creation, the hot path for reservation, and SQS publication. Its inventory feature provides atomic Valkey slot claims. The backend listing feature owns guarded cancellation release.
 - `backend` owns the planned Express SQS worker and order transitions.
 - Express does not invoke Lambda or proxy the purchase request. API Gateway REST API uses a REQUEST authorizer that reads sessions from Valkey.
 - `checkout-authorizer` owns the separate API Gateway REST REQUEST authorizer.
 - Valkey scopes idempotency by listing, authorizer-derived customer, and client key.
 - All packages use TypeScript and ECMAScript modules.
-- Increment 1 adds runtime bootstraps for the backend and storefront. Increment 2 adds email/password authentication and listing/order model foundations. Listing publication and sale behavior remain planned.
+- Increment 1 adds runtime bootstraps for the backend and storefront. Increment 2 adds email/password authentication and listing/order model foundations. Increment 3 adds verified Valkey publication, atomic processor slot claims, and a guarded listing release method. Checkout request handling, order transitions, and the release worker remain planned.
 
 ## Gotchas
 
-The backend exposes the system health contract and Better Auth email/password routes. It also has listing, slot, and order models with a deterministic listing seed. It has no listing publication or checkout routes.
+The backend exposes the system health contract and Better Auth email/password routes. It also has listing, slot, and order models with a deterministic listing seed that calls `createListing`. Listing creation publishes a verified Valkey inventory pool. It has no listing or checkout routes.
 
 Do not add package scripts until the related runtime exists and its command is verified.
 
@@ -70,3 +70,8 @@ Read each package README before changing that package.
 - Required both payment and reservation facts before terminal state or slot release.
 - Added the Better Auth email/password feature to the Express backend.
 - Added the separate checkout-authorizer package and increment 1 runtime boundaries.
+
+### 2026-09-24
+
+- Added verified Valkey inventory publication after listing creation commits.
+- Added atomic slot claims to the checkout processor and guarded cancellation release to the backend listing feature.

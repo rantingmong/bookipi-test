@@ -44,6 +44,8 @@ For example, 15 slots with `reserveSlots: 5` gives `publicStock: 10`. Ten slots 
 
 Express seeds one Valkey availability list with all slot IDs and checks the seed before it publishes the listing. A failed or incomplete seed leaves the listing unavailable. All slots in this pool are claimable. Atomic Valkey pop prevents two requests from claiming the same slot.
 
+`src/features/listing/feature.ts` owns this seed and the guarded release scripts. It stores sale times as epoch milliseconds for the checkout processor. It refuses to replace existing inventory. The demo data in `src/features/seed/feature.ts` calls `createListing` and publishes through the same path.
+
 The checkout Lambda reads the published sale state in Valkey. It uses one atomic operation to check the sale state, customer claim, scoped idempotency binding, and available slots. The sale is sold out only when Valkey has no claimable slots.
 
 The logical idempotency key is `(listingId, trusted customerId, client idempotencyKey)`. The customer ID comes from the API Gateway authorizer. A client key from another customer or listing resolves to a separate checkout attempt.
@@ -79,9 +81,15 @@ Express does not reserve a slot. The purchase path calls the CloudFront checkout
 
 If Valkey seeding or verification fails, Express does not publish the listing.
 
+The guarded release method checks the exact `orderId`, listing ID, and slot ID. It adds a slot once. A future worker must verify durable cancellation before it calls the method.
+
 After full Valkey state loss, MongoDB may not prove which slots were popped before SQS accepted an event. Keep checkout closed when ownership is unclear.
 
 ## Change log
+
+### 2026-09-24
+
+- Added verified Valkey publication, the processor slot claim, and guarded listing release methods.
 
 ### 2026-09-23
 
