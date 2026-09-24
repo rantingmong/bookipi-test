@@ -20,6 +20,7 @@ sequenceDiagram
     V-->>L: Return orderId and slotId
     L->>Q: Publish immutable order event
     Q-->>L: Accept event
+    L->>L: Create payment session redirect
     L-->>A: Return 202 after SQS accepts event
 ```
 
@@ -46,7 +47,9 @@ For different origins, configure credentialed CORS. Return the exact approved st
 
 Express never invokes Lambda and never proxies the purchase request. SQS is the only Lambda-to-Express bridge. The request contains `listingId` and the client-generated `idempotencyKey`. The handler reads trusted `customerId` only from `requestContext.authorizer.customerId` and ignores browser identity data. Lambda validates but never creates or changes the idempotency key. Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. It also allows one active order per customer and listing. A same-key retry returns and republishes the same binding. Lambda sends `eventType`, `orderId`, `customerId`, `listingId`, and `slotId` in `order-reserved.v1`. The Express SQS worker upserts MongoDB by `orderId`.
 
-Lambda returns HTTP 202 with `{ orderId, status: "PENDING" }` only after SQS accepts `order-reserved.v1`. It returns HTTP 400 for invalid JSON or fields, HTTP 401 when trusted identity is missing, HTTP 409 for an unpublished listing, closed sale, sold-out pool, active order, or cancelled reservation, and HTTP 503 for retryable Valkey or SQS errors. The mock page waits until the SQS worker persists the order in MongoDB. It uses `orderId` for reads and owner-checked outcome actions.
+Lambda creates a payment session only after SQS accepts `order-reserved.v1`. The current session feature validates the UUID and returns a relative `/payment?orderId=<encoded id>` redirect. Lambda returns HTTP 202 with `{ orderId, status: "PENDING", redirectUrl }`. A same-key retry can create the same redirect from the stored `orderId`. The feature does not call a provider, persist a session, or make a network request.
+
+Lambda returns HTTP 400 for invalid JSON or fields, HTTP 401 when trusted identity is missing, HTTP 409 for an unpublished listing, closed sale, sold-out pool, active order, or cancelled reservation, and HTTP 503 for retryable Valkey or SQS errors. The mock page waits until the SQS worker persists the order in MongoDB. It uses `orderId` for reads and owner-checked outcome actions.
 
 Valkey contains every slot document in one claimable pool. MongoDB derives `stockTotal` by counting slot documents and derives `publicStock = stockTotal - reserveSlots`. Checkout rejects a request as sold out only when its atomic operation finds no claimable slot.
 
@@ -67,6 +70,7 @@ Valkey contains every slot document in one claimable pool. MongoDB derives `stoc
 - CORS and cookie `SameSite` settings do not replace the Origin check.
 - The result includes `orderId` and the checkout status.
 - The successful result is HTTP 202 and includes `orderId` and `PENDING` status.
+- The successful result also includes the relative mock payment `redirectUrl`, created after SQS accepts the reservation event.
 - The SQS event contains only `eventType`, `orderId`, `customerId`, `listingId`, and `slotId`.
 - Lambda does not request Express. SQS is the only Lambda-to-Express bridge.
 - The same tuple reuses its order while Valkey retains the binding. It does not pop a second slot.
@@ -109,3 +113,4 @@ See [API Gateway REST Lambda authorizer guidance](https://docs.aws.amazon.com/ap
 
 - Implemented the REST Lambda request handler, tuple-scoped Valkey reservation, and `order-reserved.v1` SQS publication.
 - Defined stable checkout HTTP status and error responses.
+- Added payment redirect creation after SQS acceptance and the `redirectUrl` response field.

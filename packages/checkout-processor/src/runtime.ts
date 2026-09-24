@@ -2,6 +2,7 @@ import { SQSClient } from '@aws-sdk/client-sqs'
 import { createCandidateOrderId } from './features/checkout/feature.js'
 import { parseEnvironment } from './features/env/feature.js'
 import { claimAvailableSlot } from './features/inventory/feature.js'
+import { startPaymentSession } from './features/payment/feature.js'
 import { publishOrderReservedEvent } from './services/sqs/feature.js'
 import { createValkeyClient } from './services/valkey/feature.js'
 import type { CheckoutDependencies, RuntimeClients } from '#types'
@@ -29,5 +30,6 @@ export function getDependencies(clients: RuntimeClients): CheckoutDependencies {
       return publishOrderReservedEvent(clients.sqs, clients.queueUrl, event)
     },
     createOrderId: createCandidateOrderId,
+    startPaymentSession,
   } satisfies CheckoutDependencies
 }

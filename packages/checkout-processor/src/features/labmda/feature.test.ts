@@ -43,9 +43,17 @@ describe('Lambda HTTP helpers', () => {
   it.each([
     [
       'pending',
-      { orderId: '00000000-0000-4000-8000-000000000001', status: 'PENDING' },
+      {
+        orderId: '00000000-0000-4000-8000-000000000001',
+        status: 'PENDING',
+        redirectUrl: '/payment?orderId=00000000-0000-4000-8000-000000000001',
+      },
       202,
-      { orderId: '00000000-0000-4000-8000-000000000001', status: 'PENDING' },
+      {
+        orderId: '00000000-0000-4000-8000-000000000001',
+        status: 'PENDING',
+        redirectUrl: '/payment?orderId=00000000-0000-4000-8000-000000000001',
+      },
     ],
     [
       'unpublished',

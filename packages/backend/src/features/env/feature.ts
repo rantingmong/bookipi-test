@@ -1,6 +1,7 @@
 import {
   authEnvSchema,
   listingSeedEnvSchema,
+  mockPaymentEnvSchema,
   mongoEnvSchema,
   orderWorkerEnvSchema,
 } from '#features/env/schema'
@@ -13,6 +14,7 @@ export type AuthConfig = {
   mongoDatabase: string
   valkeyUrl: string
   storefrontOrigin?: string
+  mockPaymentEnabled: boolean
 }
 
 type Environment = Record<string, string | undefined>
@@ -21,6 +23,15 @@ export function readEnvConfig(
   environment: Environment = process.env,
 ): AuthConfig {
   const config = authEnvSchema.parse(environment)
+  const mockPaymentConfig = mockPaymentEnvSchema.parse(environment)
+  let mockPaymentEnabled = false
+  if (
+    (mockPaymentConfig.NODE_ENV === 'development' ||
+      mockPaymentConfig.NODE_ENV === 'test') &&
+    mockPaymentConfig.MOCK_PAYMENT_ENABLED === 'true'
+  ) {
+    mockPaymentEnabled = true
+  }
 
   return {
     authUrl: config.BETTER_AUTH_URL,
@@ -29,6 +40,7 @@ export function readEnvConfig(
     mongoDatabase: config.MONGODB_DATABASE,
     valkeyUrl: config.VALKEY_URL,
     storefrontOrigin: config.STOREFRONT_ORIGIN,
+    mockPaymentEnabled,
   }
 }
 

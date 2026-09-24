@@ -5,7 +5,7 @@ import type { CheckoutDependencies } from '#types'
 export { checkoutInputSchema }
 
 export type CheckoutResult =
-  | { orderId: string; status: 'PENDING' }
+  | { orderId: string; status: 'PENDING'; redirectUrl: string }
   | {
       status:
         | 'unpublished'
@@ -39,7 +39,12 @@ export async function startCheckout(
     listingId: request.listingId,
     slotId: claim.slotId,
   })
-  return { orderId: claim.orderId, status: 'PENDING' }
+  const paymentSession = dependencies.startPaymentSession(claim.orderId)
+  return {
+    orderId: claim.orderId,
+    status: 'PENDING',
+    redirectUrl: paymentSession.redirectUrl,
+  }
 }
 
 export function createCandidateOrderId(): string {

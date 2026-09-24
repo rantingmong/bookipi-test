@@ -2,6 +2,7 @@ import { createApp } from '#app'
 import {
   createAuthFeature,
   createMongoAuthAdapter,
+  resolveSessionIdentity,
 } from '#features/auth/feature'
 import { readEnvConfig, readOrderWorkerEnvConfig } from '#features/env/feature'
 import { createListingModels } from '#features/listing/models'
@@ -61,12 +62,17 @@ async function prepare() {
 async function startServer({
   auth,
   config,
+  orderModel,
   shutdown,
 }: Awaited<ReturnType<typeof prepare>>) {
   try {
     const app = createApp({
       authHandler: toNodeHandler(auth.handler),
       storefrontOrigin: config.storefrontOrigin,
+      ordersModel: orderModel.OrdersModel,
+      resolveSession: (request) =>
+        resolveSessionIdentity(auth, request.headers),
+      mockPaymentEnabled: config.mockPaymentEnabled,
     })
     const port = Number(process.env.PORT ?? 3001)
     const server = await listenHttpServer(app, port)

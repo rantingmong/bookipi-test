@@ -6,7 +6,7 @@ This repository contains the bootstrap and shared contracts for a high-throughpu
 
 The source requirements define one configurable sale, one product, limited stock, one item per user, purchase status, purchase results, a React frontend, high throughput, resilience, no overselling, unit and integration tests, stress tests, a system diagram, and implementation documentation.
 
-Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. Increment 2 adds authentication and durable listing and order models. Increment 3 adds verified Valkey listing publication, atomic inventory methods, and guarded cancellation release. Increment 4 adds the checkout Lambda REST handler and SQS reservation event publication. Increment 5 adds an Express SQS worker that stores reservation facts in MongoDB.
+Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. Increment 2 adds authentication and durable listing and order models. Increment 3 adds verified Valkey listing publication, atomic inventory methods, and guarded cancellation release. Increment 4 adds the checkout Lambda REST handler and SQS reservation event publication. Increment 5 adds an Express SQS worker that stores reservation facts in MongoDB. Increment 6 adds a post-SQS payment redirect, the owner-checked mock payment page, and local or test payment outcomes.
 
 ## Flow
 
@@ -32,9 +32,9 @@ The client sends an idempotency key. Lambda validates but does not change it. Va
 
 The Express SQS worker long-polls SQS, validates each strict `order-reserved.v1` event, and upserts the durable order by `orderId`. It acknowledges a message only after MongoDB persistence succeeds. It does not overwrite conflicting facts or reopen a terminal order.
 
-The mock payment page waits for MongoDB persistence, then uses `orderId` for owner-checked actions.
+The `/payment?orderId=...` page waits for MongoDB persistence, then uses an authenticated order read before it shows outcome controls. The owner can submit a mock success or failure in local or test mode.
 
-The current order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. Payment callbacks, reconciliation, and the release worker remain planned work. The guarded Valkey release method exists.
+The current order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. The payment feature applies mock outcomes. Provider callbacks, reconciliation, and the release worker remain planned work. The guarded Valkey release method exists.
 
 After SQS supplies and validates the immutable binding, the first valid correlated payment outcome wins. A failure or expiry changes the order to `CANCELLED` and creates a pending release intent in one MongoDB transaction. Slot reallocation after order cancellation means that an Express worker returns the slot to the Valkey pool. A later checkout can claim it. The worker first verifies ownership and retries the guarded Valkey operation; the slot is not available immediately.
 
@@ -46,9 +46,9 @@ The [reliability facet](docs/reliability.md) records current safeguards and poss
 
 The package map is:
 
-- `packages/backend`: Express API, Better Auth email/password, listing and slot models, order model, listing publication, deterministic demo seed, and SQS reservation worker; sale reads and order transitions remain planned.
+- `packages/backend`: Express API, Better Auth email/password, listing and slot models, order model, listing publication, deterministic demo seed, SQS reservation worker, authenticated order reads, and a local or test payment feature; sale reads remain planned.
 - `packages/storefront`: Next.js browser experience.
-- `packages/checkout-processor`: AWS Lambda request handling, hot-path reservation, and SQS publication.
+- `packages/checkout-processor`: AWS Lambda request handling, hot-path reservation, payment redirect creation, and SQS publication.
 - `packages/checkout-authorizer`: API Gateway REST REQUEST authorization, planned for a later increment.
 - `docs`: master flow, design facets, test strategy, and implementation roadmap.
 
@@ -70,9 +70,9 @@ At most as many orders can reach `COMPLETE` as there are slot documents. The adv
 
 The payment processor is mocked initially.
 
-A future storefront page provides success and failure buttons only after the SQS worker persists the order. It uses `orderId` and calls an owner-checked mock outcome route.
+The storefront payment page provides success and failure buttons only after the SQS worker persists the order. The checkout response includes a relative payment redirect and the page uses `orderId` for its owner-checked outcome route.
 
-The mock outcome route requires the authenticated order owner and a local or test-only flag.
+The payment outcome route requires the authenticated order owner and a local or test-only flag.
 
 The provider-shaped mock callback route requires service authentication. The browser cannot call it.
 
@@ -82,7 +82,7 @@ The unique indexes allow one `PENDING` or `COMPLETE` order per customer and list
 
 A failed or expired payment releases the slot for a new checkout with a new idempotency key.
 
-Payment result handling, callback correlation, reconciliation, and the cancellation release worker remain planned. The current order model has no payment fact fields.
+Provider callback correlation, reconciliation, and the cancellation release worker remain planned. The current order model has no payment fact fields. Mock outcomes change only the order status and do not release inventory.
 
 Real payment-provider integration is outside this take-home scope.
 
@@ -92,7 +92,7 @@ Read the design documents before runtime implementation.
 
 ## Gotchas
 
-The home page provides the API health check. Sign-up and login pages provide the current account flow. The checkout processor handles REST proxy requests, claims inventory in Valkey, and publishes `order-reserved.v1` to SQS. Backend startup requires `AWS_REGION` and `SQS_QUEUE_URL` and starts the SQS worker after MongoDB indexes initialize. The storefront checkout flow, payment, local service setup, and deployment remain planned.
+The home page provides the API health check. Sign-up, login, and mock payment pages provide the current account and payment flow. The checkout processor handles REST proxy requests, claims inventory in Valkey, publishes `order-reserved.v1` to SQS, then creates the payment redirect. Backend startup requires `AWS_REGION` and `SQS_QUEUE_URL` and starts the SQS worker after MongoDB indexes initialize. The storefront checkout flow, local service setup, and deployment remain planned.
 
 The planned local URLs are not available.
 
@@ -143,7 +143,7 @@ pnpm build
 git diff --check
 ```
 
-Use Node.js 24 and pnpm 11.20. Set `NEXT_PUBLIC_API_BASE_URL` at build time to configure the static storefront's browser API client. Local service URLs are not defined.
+Use Node.js 24 and pnpm 11.20. Set `NEXT_PUBLIC_API_BASE_URL` at build time to configure the static storefront's browser API client. Set `NEXT_PUBLIC_MOCK_PAYMENT_ENABLED=true` for local or test storefront builds that need mock outcome controls. Local service URLs are not defined.
 
 The backend uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its development server uses port `3001`. Backend source uses the `#app`, `#api/*`, `#features/*`, `#services/*`, and `#types` package imports.
 
@@ -176,3 +176,4 @@ The backend uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its
 
 - Added the checkout Lambda handler, tuple-scoped Valkey reservation, and SQS publication for increment 4.
 - Added the Express SQS worker and idempotent MongoDB persistence for increment 5. AWS SQS and MongoDB integration checks remain pending.
+- Implemented the static mock payment page, authenticated order reads, post-SQS redirect creation, and local or test payment outcomes for increment 6. Browser, MongoDB, SQS, and deployment checks remain pending.

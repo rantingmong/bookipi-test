@@ -10,3 +10,5 @@ export const orderInputSchema = z
     status: z.enum(orderStatuses),
   })
   .strict()
+
+export const orderIdSchema = z.object({ orderId: z.string().min(1) }).strict()
