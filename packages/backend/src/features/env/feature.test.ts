@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { readEnvConfig, readListingSeedEnvConfig } from '#features/env/feature'
+import {
+  readEnvConfig,
+  readListingSeedEnvConfig,
+  readMongoEnvConfig,
+  readOrderWorkerEnvConfig,
+} from '#features/env/feature'
 
 const environment = {
   BETTER_AUTH_URL: 'http://localhost:3001',
@@ -10,6 +15,50 @@ const environment = {
 }
 
 describe('environment feature', () => {
+  it('validates MongoDB settings with the existing field mapping', () => {
+    expect(
+      readMongoEnvConfig({
+        MONGODB_URI: environment.MONGODB_URI,
+        MONGODB_DATABASE: environment.MONGODB_DATABASE,
+      }),
+    ).toEqual({
+      mongoUri: environment.MONGODB_URI,
+      mongoDatabase: environment.MONGODB_DATABASE,
+    })
+    expect(
+      readMongoEnvConfig({
+        MONGODB_URI: ` ${environment.MONGODB_URI} `,
+        MONGODB_DATABASE: ` ${environment.MONGODB_DATABASE} `,
+      }),
+    ).toEqual({
+      mongoUri: ` ${environment.MONGODB_URI} `,
+      mongoDatabase: ` ${environment.MONGODB_DATABASE} `,
+    })
+  })
+
+  it('validates the MongoDB and SQS worker settings', () => {
+    expect(
+      readOrderWorkerEnvConfig({
+        MONGODB_URI: environment.MONGODB_URI,
+        MONGODB_DATABASE: environment.MONGODB_DATABASE,
+        AWS_REGION: 'ap-southeast-1',
+        SQS_QUEUE_URL: 'https://sqs.example/order-events',
+      }),
+    ).toEqual({
+      mongoUri: environment.MONGODB_URI,
+      mongoDatabase: environment.MONGODB_DATABASE,
+      awsRegion: 'ap-southeast-1',
+      sqsQueueUrl: 'https://sqs.example/order-events',
+    })
+    expect(() =>
+      readOrderWorkerEnvConfig({
+        MONGODB_URI: environment.MONGODB_URI,
+        MONGODB_DATABASE: environment.MONGODB_DATABASE,
+        AWS_REGION: 'ap-southeast-1',
+      }),
+    ).toThrow('Missing required environment variable SQS_QUEUE_URL')
+  })
+
   it('requires MongoDB and Valkey settings for the seed command', () => {
     expect(
       readListingSeedEnvConfig({

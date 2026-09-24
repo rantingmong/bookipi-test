@@ -24,9 +24,11 @@ sequenceDiagram
 
 Possible future mitigation: move the atomic claim to a durable store. A DynamoDB conditional write can record the claim, and DynamoDB Streams can feed SQS through EventBridge Pipes. Kafka can carry a claim event after a durable claim or outbox write. A Kafka write after the Valkey pop alone does not close this gap.
 
-### Duplicate SQS delivery
+### Duplicate and conflicting SQS delivery
 
-SQS can deliver the same event more than once. The worker uses `orderId` for an idempotent MongoDB upsert and acknowledges each delivery after MongoDB confirms the write.
+SQS can deliver the same event more than once. The worker validates the strict event shape, then uses `orderId` for an idempotent MongoDB upsert. It acknowledges each delivery after MongoDB confirms the write. The upsert inserts reservation facts and timestamps with `$setOnInsert`, so it does not change timestamps or reopen terminal orders.
+
+An event with different customer, listing, or slot facts for an existing `orderId` fails processing. The worker does not acknowledge it. The queue deployment owns redrive and dead-letter settings for malformed or conflicting messages.
 
 ### Concurrent slot growth
 
@@ -40,8 +42,9 @@ Slot reallocation remains planned work. It must use `orderId` as the slot owner 
 
 - Listing setup fails closed. Express does not publish an unverified Valkey seed.
 - The Lambda rejects inactive, unpublished, sold-out, or ambiguous claims.
-- SQS Standard can duplicate and reorder events. The Express worker processes events idempotently.
-- The worker acknowledges a message only after a successful MongoDB write.
+- SQS Standard can duplicate and reorder events. The Express worker processes matching duplicates idempotently and rejects conflicting facts.
+- The worker acknowledges a message only after a successful MongoDB write. Malformed and conflicting messages remain unacknowledged while the worker continues polling.
+- A MongoDB persistence error stops the polling loop and exits the worker with an error. Process supervision can restart it without driving queued orders through repeated receives.
 - The order model has no payment facts or lifecycle subdocuments. Payment callbacks, status transitions, and release recovery remain planned work.
 - Full Valkey state loss after a pop may leave ownership unclear. Do not rebuild ambiguous inventory from incomplete MongoDB facts.
 - Valkey also stores Better Auth session state. A missing or unavailable session denies checkout. Do not fall back to MongoDB. After full Valkey loss, customers sign in again.
@@ -68,3 +71,7 @@ DynamoDB is only a future alternative. Any such design must use a DynamoDB condi
 - Documented the Valkey-to-SQS crash gap and idempotent order persistence.
 - Added transaction and unique-index safeguards for concurrent slot growth.
 - Deferred payment and release recovery details beyond the model foundation.
+
+### 2026-09-24
+
+- Added strict SQS event validation and fail-closed handling for conflicting reservation facts.

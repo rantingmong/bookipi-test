@@ -8,13 +8,15 @@ The backend provides the Express API, Better Auth email/password access, durable
 
 `src/server.ts` connects MongoDB and Valkey, registers the business models, waits for their indexes, builds the Better Auth app, and starts the Express API. Startup failures close MongoDB and Valkey. `src/app.ts` mounts Better Auth at `/api/auth/*splat` before JSON parsing. The API also exposes `GET /api/system/health`.
 
-`pnpm dev` runs `node --conditions=development --import tsx --watch src/server.ts` on port `3001`. `pnpm build` runs `tsc -p tsconfig.json`. `pnpm start` runs `node dist/server.js`.
+`pnpm dev` runs `node --conditions=development --import tsx --watch src/server.ts` on port `3001`. `pnpm start` runs `node dist/server.js`. Both commands start the SQS worker after MongoDB connects and the order indexes initialize.
 
 The server registers the listing, slot, and order models before it listens. It waits for their indexes to initialize. The seed command waits for listing and slot indexes before it writes data.
 
-The environment feature validates startup settings in `src/features/env`. The auth feature owns authentication behavior and session identity mapping in `src/features/auth`. The MongoDB service uses one Mongoose connection and exposes its native MongoDB client and database to Better Auth. The MongoDB and Valkey clients live in `src/services`.
+The environment feature validates startup settings in `src/features/env`. The auth feature owns authentication behavior and session identity mapping in `src/features/auth`. The MongoDB service uses one Mongoose connection and exposes its native MongoDB client and database to Better Auth. The MongoDB, SQS, and Valkey clients live in `src/services`.
 
 Set `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL`. Set `STOREFRONT_ORIGIN` when the storefront uses a different origin. Better Auth stores users and credentials in MongoDB and sessions in Valkey secondary storage under `bookipi:auth:`. Sessions do not fall back to MongoDB.
+
+Backend startup requires `AWS_REGION` and `SQS_QUEUE_URL` for the SQS worker, in addition to the backend settings above.
 
 Run `pnpm generate:api` before you start the backend in development. The root `typecheck`, `test`, and `build` scripts generate API code first.
 
@@ -36,7 +38,9 @@ The listing feature validates listing identity, display name, sale window, `rese
 
 The listing feature calls the Valkey client after its MongoDB transaction commits. It seeds and verifies the pool before it publishes the sale. If Valkey fails, the sale remains unpublished and listing creation returns an error.
 
-The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. `orderId` identifies the checkout attempt and slot owner. Its statuses are `PENDING`, `COMPLETE`, and `CANCELLED`. Active partial indexes prevent a customer from holding two active orders for one listing and prevent two active orders from owning one listing slot.
+The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. `orderId` identifies the checkout attempt and slot owner. Its statuses are `PENDING`, `COMPLETE`, and `CANCELLED`. Active partial indexes prevent a customer from holding two active orders for one listing and prevent two active orders from owning one listing slot. The SQS worker inserts new reservation facts as `PENDING`. It uses `$setOnInsert`, so a replay does not overwrite stored facts, timestamps, or terminal status. A conflicting binding fails processing and remains unacknowledged.
+
+The worker long-polls up to ten SQS messages for 20 seconds. It validates each body against the strict `order-reserved.v1` event schema. It deletes each message only after the order upsert succeeds. A MongoDB write error stops polling, closes the API server, and fails the backend process. The queue deployment owns visibility, retry, and dead-letter settings.
 
 The feature can add a positive integer number of slots to an existing listing. It preserves `reserveSlots` and the listing fields. It counts current slot documents, inserts only the next sequential slot IDs, and returns derived counts in one transaction. Concurrent additions serialize through a write to the listing timestamp. The unique `{ listingId, slotId }` index also rejects a duplicate slot ID.
 
@@ -62,11 +66,11 @@ An API Gateway REST REQUEST Lambda authorizer will reject a missing or unapprove
 
 The client sends its `idempotencyKey`. The Lambda validates but does not change it. Valkey maps `(listingId, trusted customerId, idempotencyKey)` to `orderId` and `slotId`. A same-key retry returns or republishes that same binding.
 
-The SQS event will contain `orderId`, `customerId`, `listingId`, and `slotId`. SQS is the only Lambda-to-Express bridge. The Express SQS worker will upsert the order by `orderId`. The unique `orderId` index makes duplicate delivery idempotent.
+The SQS event contains `orderId`, `customerId`, `listingId`, and `slotId`. SQS is the only Lambda-to-Express bridge. The Express SQS worker upserts the order by `orderId`. The unique `orderId` index makes duplicate delivery idempotent.
 
 The mock payment page will wait for MongoDB persistence, then use `orderId`. Express will check its stored `customerId` before it enables owner-checked outcome buttons.
 
-The worker will long-poll SQS directly. The selected design has no SQS-to-Lambda event source mapping.
+The worker long-polls SQS directly. The selected design has no SQS-to-Lambda event source mapping.
 
 The current order model stores `orderId`, `customerId`, `listingId`, `slotId`, and `status`. It does not store the client idempotency key. Payment callbacks, order transitions, and the release worker remain planned.
 
@@ -96,7 +100,7 @@ MongoDB derives `stockTotal` from slot documents. It does not store `stockTotal`
 
 ## Gotchas
 
-The health endpoint has no business storage. Authentication, listing and slot models, order schema, demo seed, and listing Valkey methods are implemented. The API has no listing route. Workers, order transitions, reconciler, migrations, and local service URLs are not implemented.
+The health endpoint has no business storage. Authentication, listing and slot models, order schema, demo seed, listing Valkey methods, and the SQS reservation worker are implemented. The API has no listing route. Order transitions, reconciler, migrations, and local service URLs are not implemented.
 
 Do not make Express the hot-path inventory authority.
 
@@ -108,7 +112,7 @@ Payment outcome handling remains planned.
 
 The guarded Valkey cancellation release method exists. The durable order transition and release worker remain planned.
 
-Standard SQS can deliver duplicate or out-of-order events. The worker upserts orders by unique `orderId`.
+Standard SQS can deliver duplicate or out-of-order events. The worker upserts orders by unique `orderId`. It rejects conflicting facts for the same `orderId` and does not acknowledge the message.
 
 The system has no durable replay if Lambda stops after the Valkey pop and before SQS accepts the event. Keep checkout closed when inventory ownership is unclear.
 
@@ -148,3 +152,4 @@ The system has no durable replay if Lambda stops after the Valkey pop and before
 ### 2026-09-24
 
 - Added post-transaction Valkey inventory seed and guarded cancellation release to the listing feature.
+- Added the direct SQS reservation worker and immutable order upsert.

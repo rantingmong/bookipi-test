@@ -28,6 +28,7 @@ Current tests cover:
 - Checkout request validation, authorizer identity handling, stable REST error responses, same-key republishing, retryable SQS failures, and the exact `order-reserved.v1` message shape.
 - Checkout processor environment validation and lazy runtime client creation.
 - Atomic inventory claim script boundaries, tuple-scoped key selection, sale window outcomes, active-order rejection, and cancellation outcomes.
+- Order worker environment validation, SQS long-poll settings, strict event validation, acknowledgement command, reservation upsert replay, timestamp and terminal-status preservation, and conflicting-fact rejection.
 
 These tests do not prove MongoDB or Valkey integration.
 
@@ -45,7 +46,7 @@ MongoDB integration tests will use a replica set for transaction behavior. They 
 
 Valkey integration tests will cover atomic slot claims and map the client-generated `(listingId, trusted customerId, idempotencyKey)` tuple to a stable `orderId` and `slotId`. They will also cover sale-window boundaries, sold-out behavior, guarded release, and outage behavior.
 
-LocalStack tests will cover SQS delivery, duplicate messages, retry behavior, and acknowledgement timing.
+LocalStack tests will cover SQS delivery, duplicate messages, retry behavior, and acknowledgement timing. MongoDB and SQS integration tests will verify that persistence completes before acknowledgement and that failed or conflicting events remain queued.
 
 ## Browser tests with Playwright
 
@@ -72,7 +73,7 @@ k6 will test concurrent claims, repeated idempotency tuples, requests around the
 | Active customer ownership | At most one `PENDING` or `COMPLETE` order exists for a listing and customer.                                                             |
 | Active slot ownership     | At most one `PENDING` or `COMPLETE` order exists for a listing and slot.                                                                 |
 | Cancellation              | A `CANCELLED` order does not block a later checkout for the same listing and customer.                                                   |
-| SQS idempotency           | Replaying the same order event does not create another order.                                                                            |
+| SQS idempotency           | Replaying the same order event does not create another order or change its immutable facts, status, or timestamps.                       |
 | Valkey claim              | An atomic claim assigns each available slot to at most one order.                                                                        |
 | Sale window               | No request outside the active window creates a claim.                                                                                    |
 
@@ -82,7 +83,7 @@ The current seed creates one listing with `reserveSlots: 2` and ten available sl
 
 This increment has no measured load values. Later increments will define service targets after the local baseline and deployment shape are known.
 
-Increment 4 unit tests do not prove atomic Valkey behavior or SQS delivery. LocalStack, Valkey concurrency, Lambda deployment, and API Gateway proxy checks remain pending. No deployment or LocalStack proof exists.
+Increment 4 and 5 unit tests do not prove atomic Valkey behavior, SQS delivery, or MongoDB persistence before acknowledgement. LocalStack, Valkey concurrency, MongoDB transactions, Lambda deployment, and API Gateway proxy checks remain pending. No deployment or LocalStack proof exists.
 
 ## Change log
 
@@ -95,3 +96,5 @@ Increment 4 unit tests do not prove atomic Valkey behavior or SQS delivery. Loca
 
 - Added checkout handler, scoped inventory claim, and SQS event unit tests.
 - Added the active-customer key check to guarded cancellation release.
+- Added SQS worker, strict event, durable order upsert, and acknowledgement unit tests. AWS and MongoDB integration checks remain pending.
+- Added Mongoose timestamp and worker polling failure checks. AWS and MongoDB integration checks remain pending.
