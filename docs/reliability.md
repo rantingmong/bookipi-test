@@ -36,7 +36,7 @@ The listing feature writes the listing timestamp inside each slot-growth transac
 
 ### Slot reallocation after cancellation
 
-Slot reallocation remains planned work. It must use `orderId` as the slot owner and must not return a slot to Valkey when MongoDB ownership is unclear.
+The payment feature atomically stores `status: CANCELLED` and `releaseStatus: PENDING` in one MongoDB order update. After each SQS reservation upsert or payment outcome, the order feature checks that returned order. It calls guarded Valkey release with the durable facts, then marks the release complete only after Valkey returns success. If Valkey rejects a release, the caller gets an error. The SQS message remains unacknowledged, or the payment caller must retry the request. If Valkey returns the slot but MongoDB completion fails, the matching release marker makes a retry safe without adding the slot twice. A marker or owner mismatch remains pending and fails closed. If the process stops after MongoDB stores cancellation and no caller retries, no background sweep repairs the pending release.
 
 ## Decisions & assumptions
 
@@ -45,7 +45,7 @@ Slot reallocation remains planned work. It must use `orderId` as the slot owner 
 - SQS Standard can duplicate and reorder events. The Express worker processes matching duplicates idempotently and rejects conflicting facts.
 - The worker acknowledges a message only after a successful MongoDB write. Malformed and conflicting messages remain unacknowledged while the worker continues polling.
 - A MongoDB persistence error stops the polling loop and exits the worker with an error. Process supervision can restart it without driving queued orders through repeated receives.
-- The order model has no payment facts or lifecycle subdocuments. Payment callbacks, status transitions, and release recovery remain planned work.
+- The order model stores a small release state only for cancellations that need inventory return. Provider callbacks and payment reconciliation remain planned work.
 - Full Valkey state loss after a pop may leave ownership unclear. Do not rebuild ambiguous inventory from incomplete MongoDB facts.
 - Valkey also stores Better Auth session state. A missing or unavailable session denies checkout. Do not fall back to MongoDB. After full Valkey loss, customers sign in again.
 - Keep separate Valkey key namespaces for auth and inventory. Both the authorizer and checkout Lambda need Valkey access. A shared Valkey outage stops both session checks and reservations.
@@ -75,3 +75,4 @@ DynamoDB is only a future alternative. Any such design must use a DynamoDB condi
 ### 2026-09-24
 
 - Added strict SQS event validation and fail-closed handling for conflicting reservation facts.
+- Added trigger-driven cancellation release and recovery through matching Valkey markers.

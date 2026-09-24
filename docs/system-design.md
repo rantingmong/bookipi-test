@@ -44,7 +44,7 @@ The checkout Lambda reads trusted `customerId` from API Gateway authorizer conte
 
 The client creates the idempotency key. Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. MongoDB does not store the client key. A duplicate SQS event upserts by unique `orderId`.
 
-The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. `orderId` is the checkout-attempt and slot-owner identifier. The backend payment feature applies local or test outcomes. Provider callbacks and unified reconciliation remain planned work.
+The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. `orderId` is the checkout-attempt and slot-owner identifier. The backend payment feature applies local or test outcomes. Cancellation stores a pending release intent atomically with `CANCELLED`. The order feature reconciles it after each reservation upsert or payment outcome. A process stop after cancellation has no background sweep; SQS retries an unacknowledged trigger, and the payment caller retries a failed or interrupted request. Provider callback correlation and payment reconciliation remain planned work.
 
 The listing document stores identity, display name, sale window, and `reserveSlots`. The initial slot count is an operation parameter. MongoDB derives total stock from slot documents and derives public stock by subtracting `reserveSlots`. Valkey holds the live availability pool.
 

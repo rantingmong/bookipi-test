@@ -44,7 +44,7 @@ For example, 15 slots with `reserveSlots: 5` gives `publicStock: 10`. Ten slots 
 
 Express seeds one Valkey availability list with all slot IDs and checks the seed before it publishes the listing. A failed or incomplete seed leaves the listing unavailable. All slots in this pool are claimable. Atomic Valkey pop prevents two requests from claiming the same slot.
 
-`src/features/listing/feature.ts` owns this seed and the guarded release scripts. It stores sale times as epoch milliseconds for the checkout processor. It refuses to replace existing inventory. The demo data in `src/features/seed/feature.ts` calls `createListing` and publishes through the same path.
+`src/features/listing/feature.ts` owns this seed and the guarded release scripts. It stores sale times as epoch milliseconds for the checkout processor. It refuses to replace existing inventory. The cancellation release checks ownership and a release marker in one Valkey script. A matching marker returns success on retry. A marker or owner mismatch returns failure. The Express worker calls it only with facts from a durable cancelled order. The demo data in `src/features/seed/feature.ts` calls `createListing` and publishes through the same path.
 
 The checkout Lambda reads the published sale state in Valkey. It uses one atomic operation to check the sale state, customer claim, scoped idempotency binding, and available slots. The sale is sold out only when Valkey has no claimable slots.
 
@@ -98,6 +98,7 @@ After full Valkey state loss, MongoDB may not prove which slots were popped befo
 - Added verified Valkey publication, the processor slot claim, and guarded listing release methods.
 - Defined safe listing IDs and the active-customer and per-tuple idempotency keys.
 - Mapped tuple, customer, and order state to listing-scoped Valkey hashes.
+- Made matching release markers idempotent for worker crash recovery.
 
 ### 2026-09-23
 

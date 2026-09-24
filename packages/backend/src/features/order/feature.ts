@@ -1,6 +1,8 @@
 import { orderInputSchema } from '#features/order/schema'
 import type { OrderDocument, ReservationFacts } from '#features/order/types'
+import { releaseCancelledSlot } from '#features/listing/feature'
 import type { Model } from 'mongoose'
+import type { Redis } from 'ioredis'
 export { orderStatuses } from '#features/order/constants'
 export { orderInputSchema }
 
@@ -45,4 +47,33 @@ export async function applyReservationFacts(
   }
 
   return order
+}
+
+export async function reconcileCancelledOrderRelease(
+  order: OrderDocument,
+  dependencies: {
+    ordersModel: Pick<Model<OrderDocument>, 'updateOne'>
+    valkey: Redis
+  },
+): Promise<void> {
+  if (order.status !== 'CANCELLED' || order.releaseStatus !== 'PENDING') return
+
+  const released = await releaseCancelledSlot(dependencies.valkey, {
+    orderId: order.orderId,
+    customerId: order.customerId,
+    listingId: order.listingId,
+    slotId: order.slotId,
+    orderStatus: 'CANCELLED',
+  })
+  if (!released)
+    throw new Error(`Guarded slot release failed for order ${order.orderId}`)
+
+  await dependencies.ordersModel.updateOne(
+    {
+      orderId: order.orderId,
+      status: 'CANCELLED',
+      releaseStatus: 'PENDING',
+    },
+    { $set: { releaseStatus: 'COMPLETE' } },
+  )
 }

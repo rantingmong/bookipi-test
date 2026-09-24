@@ -7,8 +7,8 @@ paths:
     $ref: ./system/openapi.yml#/paths/~1health
   /api/orders/{orderId}:
     $ref: ./orders/get-order/openapi.yml#/paths/~1orders~1{orderId}
-  /api/orders/{orderId}/mock-outcome:
-    $ref: ./orders/post-mock-outcome/openapi.yml#/paths/~1orders~1{orderId}~1mock-outcome
+  /api/orders/{orderId}/payment-outcome:
+    $ref: ./orders/post-payment-outcome/openapi.yml#/paths/~1orders~1{orderId}~1payment-outcome
 x-groups:
   - ./system/openapi.yml
   - ./orders/openapi.yml

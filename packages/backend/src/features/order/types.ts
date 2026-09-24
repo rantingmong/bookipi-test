@@ -4,6 +4,7 @@ import type { z } from 'zod'
 export type OrderInput = z.infer<typeof orderInputSchema>
 
 export type OrderDocument = OrderInput & {
+  releaseStatus?: 'PENDING' | 'COMPLETE'
   createdAt?: Date
   updatedAt?: Date
 }

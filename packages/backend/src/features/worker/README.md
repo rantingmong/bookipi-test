@@ -2,17 +2,19 @@
 
 ## Purpose
 
-This feature consumes order reservation events from SQS and stores their facts through the order feature.
+This feature consumes order reservation events from SQS and stores their facts through the order feature. After each event, it reconciles that durable order's pending cancellation release before it acknowledges the message.
 
 ## Flow
 
-`src/server.ts` starts the worker after MongoDB connects and the order indexes initialize. The worker validates each event, applies its facts, then acknowledges the message. Malformed and conflicting events remain unacknowledged. A MongoDB error stops polling, closes the API server, and fails the backend process.
+`src/server.ts` starts the worker after MongoDB connects and the order indexes initialize. The worker validates each event, applies its facts, reconciles a pending release, then acknowledges the message. Malformed and conflicting events remain unacknowledged. A reconciliation error leaves the message unacknowledged. A MongoDB error stops polling, closes the API server, and fails the backend process.
 
 ## Decisions & assumptions
 
 - The worker long-polls SQS directly. SQS does not trigger a Lambda.
 - The queue deployment owns visibility, retry, and dead-letter settings.
 - The worker does not read environment settings or connect to services during import.
+- Release work uses only durable cancelled order facts. The order feature marks a release complete only after Valkey confirms the guarded release.
+- No background sweep repairs a pending release when the process stops and no caller retries.
 
 ## Tests
 
@@ -23,3 +25,4 @@ This feature consumes order reservation events from SQS and stores their facts t
 ### 2026-09-24
 
 - Added the SQS reservation worker feature.
+- Reconciled pending cancellation release before SQS acknowledgement.

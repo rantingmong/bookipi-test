@@ -1,7 +1,16 @@
 # Payment feature
 
-The payment feature applies a local or test payment outcome to a stored order. A success changes `PENDING` to `COMPLETE`. A failure or expiry changes `PENDING` to `CANCELLED`.
+The payment feature applies a local or test payment outcome to a stored order. A success changes `PENDING` to `COMPLETE`. A failure or expiry changes `PENDING` to `CANCELLED` and sets `releaseStatus` to `PENDING` in the same document update. The request handler then reconciles the pending release before it returns a response.
 
-The first terminal outcome wins. A retry with the same outcome returns the stored order. A different terminal outcome raises `PaymentOutcomeConflictError`.
+A failed or interrupted outcome request must be retried by its caller. No background sweep repairs a pending release.
 
-The feature does not call a payment provider or release inventory. The mock outcome API keeps the existing `success`, `failure`, and `expired` request values.
+The first terminal status wins. A retry that has the same terminal status returns the stored order. Both `failure` and `expired` set `CANCELLED`, so either request can retry the same cancellation. A different terminal status raises `PaymentOutcomeConflictError`.
+
+The feature does not call a payment provider or release inventory. The order feature reconciles pending cancelled slots. The mock outcome API keeps the existing `success`, `failure`, and `expired` request values.
+
+## Change log
+
+### 2026-09-24
+
+- Added an atomic durable release intent to mock cancellation.
+- Reconciled pending release after the payment outcome request.

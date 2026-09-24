@@ -5,8 +5,8 @@ info:
 paths:
   /orders/{orderId}:
     $ref: ./get-order/openapi.yml#/paths/~1orders~1{orderId}
-  /orders/{orderId}/mock-outcome:
-    $ref: ./post-mock-outcome/openapi.yml#/paths/~1orders~1{orderId}~1mock-outcome
+  /orders/{orderId}/payment-outcome:
+    $ref: ./post-payment-outcome/openapi.yml#/paths/~1orders~1{orderId}~1payment-outcome
 x-endpoints:
   - ./get-order/openapi.yml
-  - ./post-mock-outcome/openapi.yml
+  - ./post-payment-outcome/openapi.yml

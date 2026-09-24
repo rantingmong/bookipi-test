@@ -10,7 +10,7 @@ Listing and slot creation use one MongoDB transaction. The slot identifiers use 
 
 After the transaction commits, the feature seeds all slot IDs in Valkey. It checks the count before it publishes the sale. A failed seed returns an error and leaves the sale unpublished.
 
-The feature also provides a guarded cancellation release method. It checks the order in the listing-scoped `orders` hash, the customer in `active-customers`, the listing, the slot, the cancellation status, and the release marker in one Valkey script. It returns the slot to the shared pool and removes the matching active-customer hash field. A future worker must confirm the MongoDB order is `CANCELLED` before it calls this method.
+The feature also provides a guarded cancellation release method. It checks the order in the listing-scoped `orders` hash, the customer in `active-customers`, the listing, the slot, the cancellation status, and the release marker in one Valkey script. It returns the slot to the shared pool and removes the matching active-customer hash field. A matching existing marker returns success, so a worker can retry after a crash between Valkey and MongoDB writes. A mismatched marker or owner returns failure.
 
 The feature can add slots to an existing listing in one transaction. It counts the current slot documents and inserts only the next sequential slot identifiers. It does not store a stock total. A listing timestamp write serializes concurrent additions. The unique `{ listingId, slotId }` index rejects collisions.
 
@@ -21,6 +21,7 @@ The feature does not expose an admin API. The demo seed lives in `src/features/s
 ### 2026-09-24
 
 - Added Valkey seed, publication, and guarded cancellation release to the listing feature.
+- Made a matching cancellation release marker an idempotent success.
 - Updated guarded release to clear the matching active-customer order key.
 - Moved the deterministic demo seed to its own feature.
 - Restricted listing IDs to safe Valkey hash-tag values.

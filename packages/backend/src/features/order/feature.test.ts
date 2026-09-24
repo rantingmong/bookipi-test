@@ -4,10 +4,84 @@ import {
   applyReservationFacts,
   orderInputSchema,
   orderStatuses,
+  reconcileCancelledOrderRelease,
 } from '#features/order/feature'
 import { createOrderModel } from '#features/order/models'
 
 describe('order feature', () => {
+  it('releases a pending cancelled order and marks it complete after Valkey confirms', async () => {
+    const order = {
+      orderId: 'order-cancelled',
+      customerId: 'customer-001',
+      listingId: 'listing-001',
+      slotId: 'listing-001:slot:0001',
+      status: 'CANCELLED',
+      releaseStatus: 'PENDING',
+    } as const
+    const evalScript = vi.fn(async () => 1)
+    const updateOne = vi.fn(async () => ({ modifiedCount: 1 }))
+
+    await reconcileCancelledOrderRelease(order, {
+      ordersModel: { updateOne } as never,
+      valkey: { eval: evalScript } as never,
+    })
+
+    expect(evalScript).toHaveBeenCalledOnce()
+    expect(updateOne).toHaveBeenCalledWith(
+      {
+        orderId: order.orderId,
+        status: 'CANCELLED',
+        releaseStatus: 'PENDING',
+      },
+      { $set: { releaseStatus: 'COMPLETE' } },
+    )
+  })
+
+  it('does not call Valkey for an order without a pending cancellation release', async () => {
+    const evalScript = vi.fn()
+    const updateOne = vi.fn()
+
+    await reconcileCancelledOrderRelease(
+      {
+        orderId: 'order-pending',
+        customerId: 'customer-001',
+        listingId: 'listing-001',
+        slotId: 'listing-001:slot:0001',
+        status: 'PENDING',
+      },
+      {
+        ordersModel: { updateOne } as never,
+        valkey: { eval: evalScript } as never,
+      },
+    )
+
+    expect(evalScript).not.toHaveBeenCalled()
+    expect(updateOne).not.toHaveBeenCalled()
+  })
+
+  it('throws and leaves the release pending when Valkey rejects the guarded release', async () => {
+    const updateOne = vi.fn()
+
+    await expect(
+      reconcileCancelledOrderRelease(
+        {
+          orderId: 'order-cancelled',
+          customerId: 'customer-001',
+          listingId: 'listing-001',
+          slotId: 'listing-001:slot:0001',
+          status: 'CANCELLED',
+          releaseStatus: 'PENDING',
+        },
+        {
+          ordersModel: { updateOne } as never,
+          valkey: { eval: vi.fn(async () => 0) } as never,
+        },
+      ),
+    ).rejects.toThrow('Guarded slot release failed')
+
+    expect(updateOne).not.toHaveBeenCalled()
+  })
+
   it('keeps Mongoose timestamps inside the insert-only update', async () => {
     const connection = createConnection()
     const { OrdersModel } = createOrderModel(connection)
@@ -93,6 +167,7 @@ describe('order feature', () => {
         listingId: 'listing-001',
         slotId: 'listing-001:slot:0001',
         status: 'CANCELLED',
+        releaseStatus: 'PENDING',
       }),
     )
 
@@ -104,6 +179,7 @@ describe('order feature', () => {
     })
 
     expect(result.status).toBe('CANCELLED')
+    expect(result.releaseStatus).toBe('PENDING')
     expect(findOneAndUpdate.mock.calls[0]?.[1]).toEqual({
       $setOnInsert: {
         orderId: '8f67179c-73c6-49dc-984c-ed1735549d35',
@@ -189,6 +265,11 @@ describe('order feature', () => {
       'orders',
     )
     const schema = connection.model.mock.calls[0]?.[1]
+    expect(schema.obj.releaseStatus).toEqual({
+      type: String,
+      enum: ['PENDING', 'COMPLETE'],
+    })
+    expect(schema.obj.releaseAttemptedAt).toBeUndefined()
     const indexes = schema.indexes()
     expect(indexes).toContainEqual([{ orderId: 1 }, { unique: true }])
     expect(indexes).toContainEqual([

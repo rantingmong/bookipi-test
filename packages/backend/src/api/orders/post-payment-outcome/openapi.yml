@@ -3,9 +3,9 @@ info:
   title: Apply mock payment outcome
   version: 1.0.0
 paths:
-  /orders/{orderId}/mock-outcome:
+  /orders/{orderId}/payment-outcome:
     post:
-      operationId: postMockOutcome
+      operationId: postPaymentOutcome
       summary: Apply a local mock payment outcome to an owned order
       parameters:
         - name: orderId
