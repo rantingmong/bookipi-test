@@ -10,17 +10,15 @@ The storefront sends status and result reads to the Express backend.
 
 The browser sends the purchase request directly to the configured CloudFront endpoint. CloudFront routes it through API Gateway to the checkout processor.
 
-The checkout processor generates candidate order and payment-session identifiers, then stores them in the atomic Valkey reservation. It sends the immutable order, customer, listing, reservation, slot, and session binding through SQS. SQS is the only Lambda-to-Express bridge.
+The client sends an idempotency key. The checkout processor validates it and Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. MongoDB does not store the key. The processor sends `orderId`, `customerId`, `listingId`, and `slotId` through SQS. SQS is the only Lambda-to-Express bridge.
 
-The backend consumes the event and writes durable reservation and payment-session binding facts to MongoDB.
+The backend consumes the event and writes the durable order fields to MongoDB. MongoDB derives listing counts from slot documents.
 
-The payment callback sends payment facts to the same backend state-transition function.
+The mock payment page uses `orderId` after the backend persists the SQS event. Payment callbacks remain planned.
 
-The backend records the completed sale in MongoDB and releases cancelled slots once.
+The backend order model stores `orderId`, `customerId`, `listingId`, `slotId`, and `status`. Order transitions and cancelled-slot release remain planned.
 
-The order stays `AWAITING_FACTS` until both payment and SQS reservation facts exist. A payment-first failure holds the slot. After SQS validates slot ownership, one MongoDB transaction records `CANCELLED` and a pending release intent. An Express worker then retries the guarded release.
-
-A cancelled customer can start a new checkout with a new client key for the same listing. Valkey scopes the key to that listing and trusted customer.
+A cancelled customer can start a new checkout with a new client key for the same listing. Valkey keeps the key mapping. MongoDB upserts SQS events by `orderId`.
 
 The Express SQS worker long-polls the queue directly.
 
@@ -28,19 +26,20 @@ Standard SQS can duplicate and reorder events. The worker processes them idempot
 
 ## Decisions & assumptions
 
-- `backend` owns Express API behavior, Better Auth, listing setup, status reads, durable persistence, and event-driven order reconciliation. MongoDB stores users and credentials; Better Auth sessions use Valkey secondary storage.
+- `backend` owns Express API behavior, Better Auth, listing and slot models, order storage, and durable persistence. MongoDB stores users and credentials; Better Auth sessions use Valkey secondary storage.
+- `backend` uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its source uses the `#app`, `#api/*`, `#features/*`, and `#services/*` package imports.
 - `storefront` owns the Next.js user interface.
-- `checkout-processor` owns Lambda order creation, the hot path for reservation, SQS publication, and mock payment-session creation.
-- `backend` owns the Express SQS worker, unified order transition, and pending slot-release worker.
+- `checkout-processor` owns Lambda order creation, the hot path for reservation, and SQS publication.
+- `backend` owns the planned Express SQS worker and order transitions.
 - Express does not invoke Lambda or proxy the purchase request. API Gateway REST API uses a REQUEST authorizer that reads sessions from Valkey.
 - `checkout-authorizer` owns the separate API Gateway REST REQUEST authorizer.
 - Valkey scopes idempotency by listing, authorizer-derived customer, and client key.
 - All packages use TypeScript and ECMAScript modules.
-- Increment 1 adds runtime bootstraps for the backend and storefront. Increment 2 adds email/password authentication. Listing and sale behavior remain planned.
+- Increment 1 adds runtime bootstraps for the backend and storefront. Increment 2 adds email/password authentication and listing/order model foundations. Listing publication and sale behavior remain planned.
 
 ## Gotchas
 
-The backend exposes the system health contract and Better Auth email/password routes. It has no listing, inventory, or checkout behavior yet.
+The backend exposes the system health contract and Better Auth email/password routes. It also has listing, slot, and order models with a deterministic listing seed. It has no listing publication or checkout routes.
 
 Do not add package scripts until the related runtime exists and its command is verified.
 

@@ -15,10 +15,10 @@ sequenceDiagram
     participant V as Valkey
     participant Q as SQS Standard
     A->>L: Invoke with trusted customerId
-    L->>L: Generate candidate orderId and paymentSessionId
+    L->>L: Generate orderId
     L->>V: Atomically check sale and pop one slot from the shared pool
-    V-->>L: Return stable reservation binding
-    L->>Q: Publish immutable reservation event
+    V-->>L: Return orderId and slotId
+    L->>Q: Publish immutable order event
     Q-->>L: Accept event
     L-->>A: Return accepted order
 ```
@@ -30,8 +30,8 @@ sequenceDiagram
     participant Q as SQS Standard
     participant W as Express SQS worker
     participant M as MongoDB
-    Q->>W: Deliver reservation event
-    W->>M: Idempotently persist binding and reservation facts
+    Q->>W: Deliver order event
+    W->>M: Idempotently persist order fields
     M-->>W: Confirm durable write
     W-->>Q: Acknowledge event
 ```
@@ -42,11 +42,11 @@ Serve auth and checkout under the same host, or keep the checkout hostname withi
 
 For different origins, configure credentialed CORS. Return the exact approved storefront origin in `Access-Control-Allow-Origin`, never `*`, and return `Access-Control-Allow-Credentials: true` on successful POST and relevant error responses. CloudFront must allow and forward `OPTIONS` and its preflight headers. The unauthenticated API Gateway `OPTIONS` method returns the exact origin and credentials headers, plus `Access-Control-Allow-Methods` and `Access-Control-Allow-Headers` for required values. It must not use the POST authorizer or invoke checkout. Same-origin checkout does not require a preflight.
 
-Express never invokes Lambda and never proxies the purchase request. SQS is the only Lambda-to-Express bridge. Lambda creates candidate `orderId` and `paymentSessionId` values before the atomic Valkey claim, which stores them with the reservation. A same-key retry uses the stored values. Lambda sends their immutable binding with customer, listing, reservation, and slot facts in `order-reserved.v1`. The Express SQS worker writes these facts and the payment-session binding to MongoDB.
+Express never invokes Lambda and never proxies the purchase request. SQS is the only Lambda-to-Express bridge. The client creates the idempotency key. Lambda validates but never creates or changes it. Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. A same-key retry returns or republishes the same binding. Lambda sends `orderId`, `customerId`, `listingId`, and `slotId` in `order-reserved.v1`. The Express SQS worker upserts MongoDB by `orderId`.
 
-Lambda returns an accepted result only after SQS accepts `order-reserved.v1`. The mock page shows a pending state until the SQS worker persists the binding in MongoDB. It enables owner-checked outcome buttons only after Express confirms that binding.
+Lambda returns an accepted result only after SQS accepts `order-reserved.v1`. The mock page waits until the SQS worker persists the order in MongoDB. It uses `orderId` for reads and owner-checked outcome actions.
 
-Valkey contains all `stockTotal` physical slots in one claimable pool. Checkout rejects a request as sold out only when its atomic operation finds no claimable slot. At most `stockTotal` orders can reach `COMPLETE`. `reserveSlots` affects the advertised `publicStock` count, not the number or routing of slots in the Valkey pool. The storefront wording when public remaining reaches zero while the pool still has slots is an open choice.
+Valkey contains every slot document in one claimable pool. MongoDB derives `stockTotal` by counting slot documents and derives `publicStock = stockTotal - reserveSlots`. Checkout rejects a request as sold out only when its atomic operation finds no claimable slot.
 
 ## Decisions & assumptions
 
@@ -54,6 +54,7 @@ Valkey contains all `stockTotal` physical slots in one claimable pool. Checkout 
 - Atomic Valkey pop assigns each slot to at most one concurrent request. The reserve count does not prevent duplicate claims.
 - Checkout can claim any slot in the one pool. A cancellation returns one slot to that same pool through the existing guarded release.
 - The logical idempotency key is `(listingId, trusted customerId, client idempotencyKey)`. Only the same customer and listing can reuse a binding.
+- MongoDB does not store the client idempotency key. If Valkey loses the binding, checkout fails closed and does not rebuild it from MongoDB.
 - The API Gateway REQUEST Lambda authorizer checks `Origin` before it validates the Better Auth session. It passes trusted `customerId` to Lambda only when both checks pass. The Lambda ignores any browser-supplied `customerId`.
 - Better Auth stores sessions in Valkey secondary storage. MongoDB stores users, credentials, and business data. The authorizer does not call Express or MongoDB.
 - Keep `session.storeSessionInDatabase` unset or `false`. A missing Valkey session fails closed and requires a new login.
@@ -62,13 +63,13 @@ Valkey contains all `stockTotal` physical slots in one claimable pool. Checkout 
 - For cookie-authenticated checkout POST requests, the authorizer requires an approved `Origin` value. It rejects a missing or unapproved origin before checkout runs.
 - The approved origin allowlist contains exact storefront origins. Deployment configuration supplies its values; this design does not hard-code an origin.
 - CORS and cookie `SameSite` settings do not replace the Origin check.
-- The result includes `attemptId`, `orderId`, `reservationId`, `paymentSessionId`, `state`, and `idempotencyKey`.
-- The SQS event contains immutable `orderId`, `customerId`, `listingId`, `reservationId`, `slotId`, and `paymentSessionId` binding fields.
+- The result includes `orderId` and the checkout status.
+- The SQS event contains `orderId`, `customerId`, `listingId`, and `slotId`.
 - Lambda does not request Express. SQS is the only Lambda-to-Express bridge.
-- The same tuple reuses its reservation while Valkey retains the binding. It does not pop a second slot.
-- A cancelled attempt remains bound to its original tuple. A new client key can start a new attempt for that customer and listing.
-- The same client key under another customer or listing creates an independent binding. It cannot return another customer's order or session.
-- Only a `COMPLETE` order enforces one purchase per customer and listing.
+- The same tuple reuses its order while Valkey retains the binding. It does not pop a second slot.
+- A cancelled attempt does not block a later attempt for the same customer and listing.
+- The same client key under another customer or listing creates an independent order.
+- MongoDB enforces one active order per customer and listing and one active owner per listing slot.
 - A future checkout with DynamoDB must make its conditional write the atomic slot claim. Streams and EventBridge Pipes then carry committed claims to SQS.
 
 ## Gotchas

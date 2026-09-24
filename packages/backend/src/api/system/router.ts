@@ -1,4 +1,4 @@
-import { createRouter } from './generated/router.js'
-import { systemHandlers } from './generated/handlers.js'
+import { createRouter } from '#api/system/generated/router'
+import { systemHandlers } from '#api/system/generated/handlers'
 
 export const systemRouter = createRouter(systemHandlers)

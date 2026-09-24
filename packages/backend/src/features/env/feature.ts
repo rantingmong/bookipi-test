@@ -1,3 +1,6 @@
+import { mongoServiceConfigSchema } from '#services/mongodb/schema'
+import type { MongoServiceConfig } from '#services/mongodb/types'
+
 export type AuthConfig = {
   authUrl: string
   authSecret: string
@@ -52,4 +55,13 @@ export function readEnvConfig(
     valkeyUrl: required(environment, 'VALKEY_URL'),
     storefrontOrigin,
   }
+}
+
+export function readMongoEnvConfig(
+  environment: Environment = process.env,
+): MongoServiceConfig {
+  return mongoServiceConfigSchema.parse({
+    mongoUri: environment.MONGODB_URI,
+    mongoDatabase: environment.MONGODB_DATABASE,
+  })
 }

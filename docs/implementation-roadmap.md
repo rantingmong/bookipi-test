@@ -16,11 +16,11 @@ Update the affected README and design document when a decision changes.
 
 ## Decisions & assumptions
 
-- Increment 0 records the system design. Increment 1 is complete. The authentication slice of Increment 2 is complete, and listing setup remains pending.
+- Increment 0 records the system design. Increment 1 is complete. The authentication and durable listing/order model foundation slices of Increment 2 are complete. Listing publication and sale routes remain pending.
 - The selected stack remains pnpm, TypeScript, Express, Next.js static export, CloudFront, API Gateway, Lambda, MongoDB, Valkey, and LocalStack.
 - API Gateway REST API uses `packages/checkout-authorizer` for its separate REQUEST Lambda authorizer. It checks Better Auth sessions in Valkey.
 - Each future feature needs a user review before implementation if its angles change behavior or system boundaries.
-- Increment 1 provides the first runtime bootstrap. Listing and sale behavior after the authentication slice remains planned.
+- Increment 1 provides the first runtime bootstrap. Increment 2 adds authentication and the durable listing/order model foundation. Listing publication and sale behavior remain planned.
 
 ## Increment 0: repository shell and design record
 
@@ -54,19 +54,19 @@ Verification: package metadata validation, API generation, TypeScript checks, co
 
 ## Increment 2: Better Auth and listing setup
 
-Status: authentication slice complete; listing setup remains pending.
+Status: authentication and durable listing/order model foundation complete; listing publication remains pending.
 
 Angle A: keep Better Auth, listing creation, and seed orchestration in Express. Store Better Auth users and credentials in MongoDB, and sessions in Valkey secondary storage.
 
 Angle B: isolate authentication or listing setup into separate services.
 
-Selection recorded by this design: Angle A with Valkey secondary storage for sessions and MongoDB for users and credentials. This increment implements email/password sign-up, login, session display, and sign-out. It does not implement listing setup.
+Selection recorded by this design: Angle A with Valkey secondary storage for sessions and MongoDB for users and credentials. This increment implements email/password sign-up, login, session display, and sign-out. It also validates listing setup, transactionally creates and extends durable listing slots, defines the minimal durable order model, and provides a deterministic listing seed command. Listing publication, Valkey state, admin behavior, sale routes, order transitions, and order seeding remain planned.
 
 Reason: one backend boundary reduces coordination for the small take-home while keeping the hot path in Lambda.
 
-Authentication verification: focused tests cover required settings, storage selection, no MongoDB session fallback, session identity mapping, raw Express request ordering, and credentialed browser requests. MongoDB and Valkey integration, cookie expiry, revocation, listing-slot uniqueness, seed verification, and deployment authorizer checks remain pending. The separate authorizer makes no Express or MongoDB request.
+Authentication verification: focused tests cover required settings, storage selection, no MongoDB session fallback, session identity mapping, raw Express request ordering, and credentialed browser requests. Model tests cover listing validation, transactional slot creation and growth, order indexes, and repeat-safe listing seed writes. MongoDB and Valkey integration, cookie expiry, revocation, listing publication, and deployment authorizer checks remain pending. The separate authorizer makes no Express or MongoDB request.
 
-Listing setup keeps `stockTotal` as the true physical slot count and adds configurable `reserveSlots`. Validate integer counts, require `stockTotal > 0`, and enforce `0 <= reserveSlots <= stockTotal`. Derive `publicStock = stockTotal - reserveSlots`.
+Listing setup stores listing identity, display name, sale window, and `reserveSlots`. It accepts a positive integer `initialSlotCount` as an operation parameter and requires `initialSlotCount >= reserveSlots`. It stores no stock count. Derive `stockTotal` by counting slot documents and `publicStock = stockTotal - reserveSlots`.
 
 ## Increment 3: Valkey seed and sale status
 
@@ -82,7 +82,7 @@ Reason: a failed seed must fail closed instead of exposing a partially available
 
 Planned verification: seed counts, publication state, sale-window boundaries, and status reads.
 
-Seed all `stockTotal` physical slots into one Valkey pool. Verify examples: 15 total and 5 reserve gives public count 10; 10 total and 2 reserve gives public count 8. Verify that publication fails if the seed count does not equal `stockTotal`.
+Seed every slot document into one Valkey pool. Verify examples: 15 total slots and 5 reserve gives public count 10; 10 total slots and 2 reserve gives public count 8. Verify that publication fails if the seed count does not equal the slot-document count.
 
 ## Increment 4: checkout reservation and SQS publication
 
@@ -100,19 +100,19 @@ Reason: the hot path stays close to Valkey and scales independently from durable
 
 Planned verification: concurrent requests, no overselling, one item per user, stable `orderId` for the same `(listingId, trusted customerId, client idempotencyKey)` while Valkey state remains, cross-customer key isolation, best-effort publish retry, duplicate SQS delivery, and the documented crash gap after the Valkey pop.
 
-The atomic claim pops any one slot from the shared pool. The reserve count does not route claims or provide concurrency protection. Reject checkout as sold out only when Valkey has no claimable slots. At most `stockTotal` orders can reach `COMPLETE`; cancellation returns a slot to the same pool through guarded release. Verify that ten distinct authenticated customers can complete with `stockTotal: 10` and `reserveSlots: 2`, including customers 9 and 10 through the hidden allowance. Then verify that an 11th distinct authenticated customer with a fresh idempotency key receives a sold-out result while the sale remains active and no cancellation occurs.
+The atomic claim pops any one slot from the shared pool. The reserve count does not route claims. Reject checkout as sold out only when Valkey has no claimable slots. At most as many orders can reach `COMPLETE` as there are slot documents. Verify ten customers can complete with ten slots and `reserveSlots: 2`, then verify an 11th customer receives a sold-out result while the sale remains active.
 
 ## Increment 5: durable reservation facts
 
 Status: awaiting review.
 
-Angle A: let the Express SQS worker upsert reservation facts directly into MongoDB.
+Angle A: let the Express SQS worker upsert minimal order fields directly into MongoDB by `orderId`.
 
 Angle B: store every SQS event in an event log before updating the order.
 
 Selection recorded by this design: Angle A.
 
-Reason: the selected path keeps the first implementation small while unique indexes provide idempotent facts.
+Reason: the selected path keeps the first implementation small while the unique `orderId` index makes event replay idempotent.
 
 Planned verification: duplicate and reordered events, acknowledgement timing, durable order facts, and idempotent handling of Standard SQS delivery.
 
@@ -120,29 +120,29 @@ Planned verification: duplicate and reordered events, acknowledgement timing, du
 
 Status: awaiting review.
 
-Angle A: add a Next.js mock payment page with success and failure buttons. The page calls an owner-checked outcome route, and Express translates the result into the shared callback handler.
+Angle A: add a Next.js mock payment page with success and failure buttons. The page uses `orderId` after the SQS worker persists the order.
 
 Angle B: run a separate local payment emulator and connect the storefront to its callback endpoint.
 
-Selection recorded by this design: Angle A. Lambda creates candidate `orderId` and `paymentSessionId` values before the atomic Valkey claim. The claim stores them. The SQS event carries the immutable binding to the Express worker. The page waits for MongoDB persistence before it shows owner-checked buttons.
+Selection recorded by this design: Angle A. Lambda creates `orderId` before the atomic Valkey claim. The SQS event carries `orderId`, `customerId`, `listingId`, and `slotId` to the Express worker. The page waits for MongoDB persistence before it shows owner-checked buttons.
 
-Reason: the page exercises the same callback rules without exposing the service-authenticated callback route or adding a second local service.
+Reason: the page uses the existing order identity without adding a second local service.
 
-Planned verification: SQS-backed mock-session correlation, page pending state, success, failure, expiry, callback replay, owner checks, and callback correlation mismatch quarantine. A provider callback may arrive before SQS; it stores a pending fact and leaves the order `AWAITING_FACTS` without releasing the slot.
+Planned verification: page pending state, success, failure, expiry, owner checks, and order reads by `orderId`. Provider callbacks remain outside this increment.
 
 ## Increment 7: unified order reconciliation and durable slot release
 
 Status: awaiting review.
 
-Angle A: send SQS and payment facts to one reconciliation and state-transition function. Keep the order `AWAITING_FACTS` until both facts exist and callback correlation matches. Store a release intent with `CANCELLED`, then let an Express worker run the guarded Valkey release.
+Angle A: apply payment outcomes to the order status after the SQS worker persists the order. Use `orderId` as the slot owner and return a cancelled slot through a guarded Valkey release.
 
 Angle B: keep separate SQS and payment state machines and merge their results in a periodic batch job.
 
 Selection recorded by this design: Angle A.
 
-Reason: one transition function makes event order and terminal-state rules explicit.
+Reason: order status and slot ownership use one stable order identifier.
 
-Planned verification: both event orders, conflicting payment outcomes in both arrival orders, payment-first pending state, callback correlation mismatch quarantine, duplicate events, terminal transitions, atomic cancellation and release intent after binding validation, worker retry after crashes, new checkout after cancellation, compare-and-delete release, active partial-index rejection, old release replay after slot reallocation, and final `listing-slot.orderId` ownership.
+Planned verification: duplicate SQS events, status transitions, cancellation release, worker retry after crashes, new checkout after cancellation, active partial-index rejection, and `orderId` slot ownership. Provider callback correlation and reconciliation remain deferred.
 
 ## Increment 8: storefront purchase experience
 
@@ -192,3 +192,4 @@ Open choice: select the live storefront wording for the case where public remain
 - Recorded `stockTotal`, `reserveSlots`, `publicStock`, one-pool seeding and claims, and the unresolved live-stock display wording.
 - Selected contract-first OpenAPI YAML and added the increment 1 bootstrap scope.
 - Completed the email/password authentication slice of Increment 2. Listing setup remains pending.
+- Added the durable listing/order model foundation and deterministic listing seed. Listing publication remains pending.

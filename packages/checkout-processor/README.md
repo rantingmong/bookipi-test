@@ -14,13 +14,15 @@ After `Origin` passes, the authorizer will check the Better Auth session in Valk
 
 The browser will call the CloudFront checkout endpoint. Express will not invoke Lambda or proxy the purchase request.
 
-The Lambda will generate candidate `orderId` and `paymentSessionId` values before the Valkey claim. The claim will store them as part of the reservation. A same-key retry will reuse the stored values.
+The client will send its idempotency key with the checkout request. The Lambda will validate but not generate or change that key. Valkey will map `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. A same-key retry will return or republish the same binding.
 
-The Lambda will atomically check the sale window, idempotency, and one-item-per-user rule in Valkey, then pop one slot from the shared pool. The pool contains all `stockTotal` physical slots, including the configured `reserveSlots` subset.
+The Lambda will use `orderId` as the slot-owner identifier. MongoDB will persist order fields without the idempotency key. Duplicate SQS delivery will upsert by `orderId`.
+
+The Lambda will atomically check the sale window, idempotency, and one-item-per-user rule in Valkey, then pop one slot from the shared pool. The pool contains every durable listing-slot document. MongoDB derives the total and public counts from those documents.
 
 The same Valkey operation will create the reservation and idempotency binding.
 
-The Lambda will publish an order-reserved event to a Standard SQS queue. The event will contain the immutable `orderId`, `customerId`, `listingId`, `reservationId`, `slotId`, and `paymentSessionId` binding.
+The Lambda will publish an order-reserved event to a Standard SQS queue. The event will contain `orderId`, `customerId`, `listingId`, and `slotId`.
 
 SQS will be the only Lambda-to-Express bridge. The Express worker will persist the binding in MongoDB.
 
@@ -34,15 +36,14 @@ The Lambda will return a stable attempt result for safe retries.
 - A Valkey outage denies auth and stops reservation. Do not fall back to MongoDB for session checks.
 - CORS and cookie `SameSite` settings do not replace the authorizer's required Origin check.
 - The initial quantity is exactly one.
-- `stockTotal` is the physical slot limit. `reserveSlots` only reduces the advertised `publicStock` count. At most `stockTotal` orders can reach `COMPLETE`.
+- `reserveSlots` reduces the advertised count derived from slot documents. At most as many orders can reach `COMPLETE` as there are slot documents.
 - The Lambda can claim any slot in the one Valkey pool. The atomic pop, not the reserve count, prevents two requests from claiming one slot.
 - A sold-out response requires an empty Valkey pool. A guarded cancellation release returns the slot to that same pool.
 - SQS is transport and is not the durable order store.
 - A retry uses the same `(listingId, trusted customerId, client idempotencyKey)` and reuses the reservation while Valkey retains its state.
 - A repeated logical attempt by the same customer for the same listing returns the same `orderId`; another customer cannot reuse that binding.
 - A new idempotency key cannot bypass a completed purchase, but it can start a new checkout after cancellation.
-- The server stores the session binding and validates callback data against it.
-- SQS carries the immutable mock-session binding to Express. The browser waits for the MongoDB binding before it can submit an owner-checked outcome.
+- SQS carries the order fields to Express. The mock payment page waits for MongoDB persistence, then uses `orderId` for owner-checked actions.
 - The implementation increment will choose Lambda timeout and SQS delivery settings.
 
 ## Gotchas
@@ -57,9 +58,7 @@ This retry is best effort. There is no durable replay if Lambda stops after the 
 
 Standard SQS can deliver duplicate or out-of-order events. The backend worker handles them idempotently.
 
-Payment failure or expiration cancels the order and releases its slot through one guarded operation.
-
-The release compares the old `reservationId` before it removes the customer claim or returns the slot.
+Payment failure or expiration changes order status and releases its slot through a guarded operation in a future increment. The operation uses `orderId` as the slot owner.
 
 ## Design links
 

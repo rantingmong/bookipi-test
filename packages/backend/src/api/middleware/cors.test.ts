@@ -1,6 +1,6 @@
 import express from 'express'
 import { describe, expect, it } from 'vitest'
-import { corsMiddleware } from './cors.js'
+import { corsMiddleware } from '#api/middleware/cors'
 
 const storefrontOrigin = 'https://store.example.test'
 

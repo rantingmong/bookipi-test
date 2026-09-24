@@ -17,7 +17,7 @@ Read the root `README.md` and every applicable directory `README.md` before work
 - Use pnpm for package management.
 - Use Node.js 24 and TypeScript.
 - Use ECMAScript modules with `"type": "module"`.
-- Use the backend `#app` and `#api/*` package imports, and the storefront `@/*` TypeScript alias.
+- Use backend `#app`, `#api/*`, `#features/*`, and `#services/*` package imports. Use the storefront `@/*` TypeScript alias.
 - Do not add npm or Yarn lockfiles.
 - Do not guess commands. Confirm a command in a manifest or document before use.
 - Use the root Prettier configuration. Run `pnpm format:check` before completion.

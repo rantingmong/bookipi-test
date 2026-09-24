@@ -4,7 +4,7 @@ import { fromNodeHeaders } from 'better-auth/node'
 import type { BetterAuthOptions } from 'better-auth'
 import type { Db, MongoClient } from 'mongodb'
 import type { IncomingHttpHeaders } from 'node:http'
-import type { AuthConfig } from '../env/feature.js'
+import type { AuthConfig } from '#features/env/feature'
 
 export type AuthFeatureDependencies = {
   config: AuthConfig

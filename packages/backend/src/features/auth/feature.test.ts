@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createAuthFeatureOptions, resolveSessionIdentity } from './feature.js'
-import { readEnvConfig } from '../env/feature.js'
-import { authSessionKeyPrefix } from '../../services/valkey/client.js'
+import {
+  createAuthFeatureOptions,
+  resolveSessionIdentity,
+} from '#features/auth/feature'
+import { readEnvConfig } from '#features/env/feature'
+import { authSessionKeyPrefix } from '#services/valkey/client'
 
 const environment = {
   BETTER_AUTH_URL: 'http://localhost:3001',

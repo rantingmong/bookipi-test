@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express'
 import { describe, expect, it } from 'vitest'
 
 import { app as defaultApp, createApp } from '#app'
-import { readEnvConfig } from './features/env/feature.js'
+import { readEnvConfig } from '#features/env/feature'
 
 describe('createApp', () => {
   it('passes the raw auth request stream before JSON parsing', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readEnvConfig } from './feature.js'
+import { readEnvConfig, readMongoEnvConfig } from '#features/env/feature'
 
 const environment = {
   BETTER_AUTH_URL: 'http://localhost:3001',
@@ -10,6 +10,19 @@ const environment = {
 }
 
 describe('environment feature', () => {
+  it('reads only Mongo settings for the seed command', () => {
+    expect(
+      readMongoEnvConfig({
+        MONGODB_URI: environment.MONGODB_URI,
+        MONGODB_DATABASE: environment.MONGODB_DATABASE,
+      }),
+    ).toEqual({
+      mongoUri: environment.MONGODB_URI,
+      mongoDatabase: environment.MONGODB_DATABASE,
+    })
+    expect(() => readMongoEnvConfig({})).toThrow()
+  })
+
   it('validates required settings and accepts only an exact optional storefront origin', () => {
     expect(readEnvConfig(environment)).toMatchObject({
       authUrl: environment.BETTER_AUTH_URL,
