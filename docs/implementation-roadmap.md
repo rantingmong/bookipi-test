@@ -20,7 +20,7 @@ Update the affected README and design document when a decision changes.
 - The selected stack remains pnpm, TypeScript, Express, Next.js static export, CloudFront, API Gateway, Lambda, MongoDB, Valkey, and LocalStack.
 - API Gateway REST API uses `packages/checkout-authorizer` for its separate REQUEST Lambda authorizer. It checks Better Auth sessions in Valkey.
 - Each future feature needs a user review before implementation if its angles change behavior or system boundaries.
-- Increment 1 provides the first runtime bootstrap. Increment 2 adds authentication and the durable listing/order model foundation. Listing publication and sale behavior remain planned.
+- Increment 1 provides the first runtime bootstrap. Increment 2 adds authentication and the durable listing/order model foundation. Increment 3 adds listing publication and inventory methods. Sale routes remain planned.
 
 ## Increment 0: repository shell and design record
 
@@ -60,17 +60,17 @@ Angle A: keep Better Auth, listing creation, and seed orchestration in Express. 
 
 Angle B: isolate authentication or listing setup into separate services.
 
-Selection recorded by this design: Angle A with Valkey secondary storage for sessions and MongoDB for users and credentials. This increment implements email/password sign-up, login, session display, and sign-out. It also validates listing setup, transactionally creates and extends durable listing slots, defines the minimal durable order model, and provides a deterministic listing seed command. Listing publication, Valkey state, admin behavior, sale routes, order transitions, and order seeding remain planned.
+Selection recorded by this design: Angle A with Valkey secondary storage for sessions and MongoDB for users and credentials. This increment implements email/password sign-up, login, session display, and sign-out. It also validates listing setup, transactionally creates and extends durable listing slots, defines the minimal durable order model, and provides a deterministic listing seed command. Increment 3 adds listing publication and Valkey state. Admin behavior, sale routes, order transitions, and order seeding remain planned.
 
 Reason: one backend boundary reduces coordination for the small take-home while keeping the hot path in Lambda.
 
-Authentication verification: focused tests cover required settings, storage selection, no MongoDB session fallback, session identity mapping, raw Express request ordering, and credentialed browser requests. Model tests cover listing validation, transactional slot creation and growth, order indexes, and repeat-safe listing seed writes. MongoDB and Valkey integration, cookie expiry, revocation, listing publication, and deployment authorizer checks remain pending. The separate authorizer makes no Express or MongoDB request.
+Authentication verification: focused tests cover required settings, storage selection, no MongoDB session fallback, session identity mapping, raw Express request ordering, and credentialed browser requests. Model tests cover listing validation, transactional slot creation and growth, and order indexes. Increment 3 changes the demo seed to call `createListing`; it is one-shot. MongoDB integration, cookie expiry, revocation, sale reads, and deployment authorizer checks remain pending. The separate authorizer makes no Express or MongoDB request.
 
 Listing setup stores listing identity, display name, sale window, and `reserveSlots`. It accepts a positive integer `initialSlotCount` as an operation parameter and requires `initialSlotCount >= reserveSlots`. It stores no stock count. Derive `stockTotal` by counting slot documents and `publicStock = stockTotal - reserveSlots`.
 
 ## Increment 3: Valkey seed and sale status
 
-Status: awaiting review.
+Status: implemented as listing creation publication and inventory methods. Sale status reads remain planned.
 
 Angle A: seed Valkey synchronously and publish only after verification.
 
@@ -80,11 +80,13 @@ Selection recorded by this design: Angle A.
 
 Reason: a failed seed must fail closed instead of exposing a partially available sale.
 
-Planned verification: seed counts, publication state, sale-window boundaries, and status reads.
+Verification: focused tests cover seed counts, publication state, sale-window checks, atomic slot claims, and guarded release. A local Valkey smoke check covers seed, unique claims, sold out, release, and reclaim. MongoDB integration and status reads remain planned.
 
 Seed every slot document into one Valkey pool. Verify examples: 15 total slots and 5 reserve gives public count 10; 10 total slots and 2 reserve gives public count 8. Verify that publication fails if the seed count does not equal the slot-document count.
 
-## Increment 4: checkout reservation and SQS publication
+This increment also adds the first checkout-processor feature: an atomic slot pop that binds a slot to `orderId`. The backend listing feature provides a guarded release method. A future worker must confirm durable cancellation before it calls that method.
+
+## Increment 4: checkout request and SQS publication
 
 Status: awaiting review.
 

@@ -23,7 +23,7 @@ async function startServer() {
     await Promise.all([
       listingModels.ListingModel.init(),
       listingModels.ListingSlotModel.init(),
-      orderModel.init(),
+      orderModel.OrdersModel.init(),
     ])
     const auth = createAuthFeature({
       config,

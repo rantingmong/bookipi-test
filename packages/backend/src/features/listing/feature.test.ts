@@ -1,11 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
 import {
   addListingSlots,
   createListing,
   getListingCounts,
   listingInputSchema,
+  releaseCancelledSlot,
+  seedListingInventory,
 } from '#features/listing/feature'
 import { createListingModels } from '#features/listing/models'
+import { describe, expect, it, vi } from 'vitest'
 
 const validListing = {
   listingId: 'flash-sale-2026',
@@ -56,18 +58,37 @@ describe('listing feature', () => {
   })
 
   it('creates metadata and initial slots in one transaction', async () => {
+    const steps: string[] = []
     const session = {
-      withTransaction: vi.fn(async (callback) => callback()),
+      withTransaction: vi.fn(async (callback) => {
+        await callback()
+        steps.push('commit')
+      }),
       endSession: vi.fn(),
     }
     const connection = { startSession: vi.fn(async () => session) }
     const ListingModel = { create: vi.fn(async (docs) => docs) }
     const ListingSlotModel = { insertMany: vi.fn(async (docs) => docs) }
-
+    const evalScript = vi
+      .fn()
+      .mockResolvedValueOnce(15)
+      .mockResolvedValueOnce(1)
+    const valkeyConnection = {
+      eval: vi.fn(async (...args: unknown[]) => {
+        if (evalScript.mock.calls.length === 0) {
+          steps.push('seed')
+        }
+        return evalScript(...args)
+      }),
+      llen: vi.fn(async () => 15),
+      hget: vi.fn(async () => '15'),
+    }
     const result = await createListing(validListing, {
-      connection: connection as never,
+      mongoConnection: connection as never,
       ListingModel: ListingModel as never,
       ListingSlotModel: ListingSlotModel as never,
+      OrdersModel: {} as never,
+      valkeyConnection: valkeyConnection as never,
     })
 
     expect(ListingModel.create).toHaveBeenCalledWith(
@@ -101,6 +122,31 @@ describe('listing feature', () => {
     })
     expect(session.withTransaction).toHaveBeenCalledOnce()
     expect(session.endSession).toHaveBeenCalledOnce()
+    expect(steps).toEqual(['commit', 'seed'])
+    expect(valkeyConnection.eval).toHaveBeenCalledTimes(2)
+    expect(valkeyConnection.eval.mock.calls[0]?.slice(-15)).toEqual(
+      slots?.map((slot) => slot.slotId),
+    )
+  })
+
+  it('does not report a created listing when inventory seeding fails', async () => {
+    const session = {
+      withTransaction: vi.fn(async (callback) => callback()),
+      endSession: vi.fn(),
+    }
+    await expect(
+      createListing(validListing, {
+        mongoConnection: { startSession: vi.fn(async () => session) } as never,
+        ListingModel: { create: vi.fn(async () => undefined) } as never,
+        ListingSlotModel: { insertMany: vi.fn(async () => undefined) } as never,
+        OrdersModel: {} as never,
+        valkeyConnection: {
+          eval: vi.fn(async () => {
+            throw new Error('Valkey inventory seed verification failed')
+          }),
+        } as never,
+      }),
+    ).rejects.toThrow('Valkey inventory seed verification failed')
   })
 
   it('derives total and public counts from the slot collection', async () => {
@@ -142,9 +188,11 @@ describe('listing feature', () => {
     const result = await addListingSlots(
       { listingId: 'flash-sale-2026', additionalSlots: 3 },
       {
-        connection: connection as never,
+        mongoConnection: connection as never,
+        valkeyConnection: {} as never,
         ListingModel: ListingModel as never,
         ListingSlotModel: ListingSlotModel as never,
+        OrdersModel: {} as never,
       },
     )
 
@@ -172,9 +220,11 @@ describe('listing feature', () => {
   it('rejects invalid slot additions before opening a transaction', async () => {
     const startSession = vi.fn()
     const dependencies = {
-      connection: { startSession },
+      mongoConnection: { startSession },
+      valkeyConnection: {} as never,
       ListingModel: {} as never,
       ListingSlotModel: {} as never,
+      OrdersModel: {} as never,
     }
 
     await expect(
@@ -228,5 +278,67 @@ describe('listing feature', () => {
       { listingId: 1, state: 1 },
       {},
     ])
+  })
+
+  it('publishes only after the Valkey seed count matches', async () => {
+    const evalScript = vi.fn().mockResolvedValueOnce(2).mockResolvedValueOnce(1)
+    const client = {
+      eval: evalScript,
+      llen: vi.fn(async () => 2),
+      hget: vi.fn(async () => '2'),
+    }
+    await seedListingInventory(client as never, {
+      listing: {
+        listingId: 'sale-1',
+        saleStartsAt: new Date('2026-10-01T10:00:00.000Z'),
+        saleEndsAt: new Date('2026-10-01T11:00:00.000Z'),
+        reserveSlots: 1,
+      },
+      slots: [{ slotId: 'slot-1' }, { slotId: 'slot-2' }],
+    })
+    expect(evalScript).toHaveBeenCalledTimes(2)
+    expect(evalScript.mock.calls[0]?.slice(4, 6)).toEqual([
+      String(new Date('2026-10-01T10:00:00.000Z').getTime()),
+      String(new Date('2026-10-01T11:00:00.000Z').getTime()),
+    ])
+  })
+
+  it('keeps the listing unpublished when the Valkey count differs', async () => {
+    const evalScript = vi.fn(async () => 2)
+    await expect(
+      seedListingInventory(
+        {
+          eval: evalScript,
+          llen: vi.fn(async () => 1),
+          hget: vi.fn(async () => '2'),
+        } as never,
+        {
+          listing: {
+            listingId: 'sale-1',
+            saleStartsAt: new Date('2026-10-01T10:00:00.000Z'),
+            saleEndsAt: new Date('2026-10-01T11:00:00.000Z'),
+            reserveSlots: 1,
+          },
+          slots: [{ slotId: 'slot-1' }, { slotId: 'slot-2' }],
+        },
+      ),
+    ).rejects.toThrow('seed verification failed')
+    expect(evalScript).toHaveBeenCalledOnce()
+  })
+
+  it('releases a cancelled slot through one guarded operation', async () => {
+    const evalScript = vi.fn(async (..._args: unknown[]) => 1)
+    await expect(
+      releaseCancelledSlot({ eval: evalScript } as never, {
+        listingId: 'sale-1',
+        orderId: 'order-1',
+        slotId: 'slot-1',
+        orderStatus: 'CANCELLED',
+      }),
+    ).resolves.toBe(true)
+    const script = evalScript.mock.calls[0]?.[0]
+    expect(script).toContain("redis.call('HGET', KEYS[3], 'orderId')")
+    expect(script).toContain("redis.call('EXISTS', KEYS[4])")
+    expect(script).toContain("redis.call('RPUSH', KEYS[2], ARGV[3])")
   })
 })

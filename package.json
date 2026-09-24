@@ -12,8 +12,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "generate:api": "node scripts/generate-api.mjs",
-    "typecheck": "pnpm generate:api && pnpm --filter @bookipi/backend typecheck && pnpm --filter @bookipi/storefront typecheck",
-    "test": "pnpm generate:api && pnpm --filter @bookipi/backend test && pnpm --filter @bookipi/storefront test",
+    "typecheck": "pnpm generate:api && pnpm --filter @bookipi/backend typecheck && pnpm --filter @bookipi/checkout-processor typecheck && pnpm --filter @bookipi/storefront typecheck",
+    "test": "pnpm generate:api && pnpm --filter @bookipi/backend test && pnpm --filter @bookipi/checkout-processor test && pnpm --filter @bookipi/storefront test",
     "build": "pnpm generate:api && pnpm --filter @bookipi/backend build && pnpm --filter @bookipi/storefront build"
   },
   "devDependencies": {

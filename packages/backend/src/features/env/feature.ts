@@ -65,3 +65,12 @@ export function readMongoEnvConfig(
     mongoDatabase: environment.MONGODB_DATABASE,
   })
 }
+
+export function readListingSeedEnvConfig(
+  environment: Environment = process.env,
+) {
+  return {
+    ...readMongoEnvConfig(environment),
+    valkeyUrl: required(environment, 'VALKEY_URL'),
+  }
+}

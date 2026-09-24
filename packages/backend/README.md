@@ -34,13 +34,15 @@ Use test-driven development for backend changes. Add a focused test first and ru
 
 The listing feature validates listing identity, display name, sale window, `reserveSlots`, and an operation-level `initialSlotCount`. It stores no stock total. It creates the listing and its initial durable slots in one MongoDB transaction. Read and domain output counts the listing's slot documents and derives `publicStock = stockTotal - reserveSlots`.
 
+The listing feature calls the Valkey client after its MongoDB transaction commits. It seeds and verifies the pool before it publishes the sale. If Valkey fails, the sale remains unpublished and listing creation returns an error.
+
 The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. `orderId` identifies the checkout attempt and slot owner. Its statuses are `PENDING`, `COMPLETE`, and `CANCELLED`. Active partial indexes prevent a customer from holding two active orders for one listing and prevent two active orders from owning one listing slot.
 
 The feature can add a positive integer number of slots to an existing listing. It preserves `reserveSlots` and the listing fields. It counts current slot documents, inserts only the next sequential slot IDs, and returns derived counts in one transaction. Concurrent additions serialize through a write to the listing timestamp. The unique `{ listingId, slotId }` index also rejects a duplicate slot ID.
 
-Run `pnpm --filter @bookipi/backend seed` to upsert one deterministic listing with `reserveSlots: 2` and ten available slots. It derives 10 total slots and 8 public slots from slot data. It does not create an order or publish Valkey state. Set `MONGODB_URI` and `MONGODB_DATABASE` before you run it.
+Run `pnpm --filter @bookipi/backend seed` to create one deterministic listing with `reserveSlots: 2` and ten available slots. It derives 10 total slots and 8 public slots from slot data. It publishes Valkey inventory through `createListing`. Set `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL` before you run it. A second run with the same listing ID fails.
 
-Use the `#app`, `#api/*`, `#features/*`, and `#services/*` imports for backend code. The package maps resolve TypeScript source during development and compiled JavaScript after build. Do not edit generated API output.
+Use the `#app`, `#api/*`, `#features/*`, `#services/*`, and `#types` imports for backend code. The package maps resolve TypeScript source during development and compiled JavaScript after build. Do not edit generated API output.
 
 ## Flow
 
@@ -48,7 +50,7 @@ Express will authenticate customers with Better Auth.
 
 The listing feature creates listing metadata and initial `listing-slot` records in one transaction. It derives `stockTotal` from slot documents and `publicStock = stockTotal - reserveSlots`.
 
-Listing publication will seed and verify one Valkey availability list with every slot before it publishes the listing.
+The listing feature commits its MongoDB transaction, seeds and verifies one Valkey availability list with every slot, then publishes the listing. The deterministic demo seed in `src/features/seed` calls that feature.
 
 Express will expose sale status and purchase result reads.
 
@@ -66,7 +68,7 @@ The mock payment page will wait for MongoDB persistence, then use `orderId`. Exp
 
 The worker will long-poll SQS directly. The selected design has no SQS-to-Lambda event source mapping.
 
-The current order model stores `orderId`, `customerId`, `listingId`, `slotId`, and `status`. It does not store the client idempotency key. Payment callbacks, order transitions, and slot release remain planned.
+The current order model stores `orderId`, `customerId`, `listingId`, `slotId`, and `status`. It does not store the client idempotency key. Payment callbacks, order transitions, and the release worker remain planned.
 
 A cancelled order keeps its original `(listingId, customerId, client idempotencyKey)` binding. A new client key can start a new checkout for that customer and listing.
 
@@ -94,7 +96,7 @@ MongoDB derives `stockTotal` from slot documents. It does not store `stockTotal`
 
 ## Gotchas
 
-The health endpoint has no business storage. Authentication, listing and slot models, order schema, and deterministic listing seed are implemented. Listing publication, Valkey seed and verification, workers, reconciler, migrations, and local service URLs are not implemented.
+The health endpoint has no business storage. Authentication, listing and slot models, order schema, demo seed, and listing Valkey methods are implemented. The API has no listing route. Workers, order transitions, reconciler, migrations, and local service URLs are not implemented.
 
 Do not make Express the hot-path inventory authority.
 
@@ -104,7 +106,7 @@ Delayed SQS events must not reopen a cancelled order.
 
 Payment outcome handling remains planned.
 
-Cancellation release remains planned.
+The guarded Valkey cancellation release method exists. The durable order transition and release worker remain planned.
 
 Standard SQS can deliver duplicate or out-of-order events. The worker upserts orders by unique `orderId`.
 
@@ -142,3 +144,7 @@ The system has no durable replay if Lambda stops after the Valkey pop and before
 - Added dedicated session middleware tests and backend test-driven development guidance.
 - Added Better Auth email/password sign-up and login with MongoDB accounts and Valkey sessions.
 - Added Mongoose-backed listing, slot, and order models with a deterministic listing seed.
+
+### 2026-09-24
+
+- Added post-transaction Valkey inventory seed and guarded cancellation release to the listing feature.

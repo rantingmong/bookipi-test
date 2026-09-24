@@ -6,7 +6,7 @@ This repository contains the bootstrap and shared contracts for a high-throughpu
 
 The source requirements define one configurable sale, one product, limited stock, one item per user, purchase status, purchase results, a React frontend, high throughput, resilience, no overselling, unit and integration tests, stress tests, a system diagram, and implementation documentation.
 
-Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. The authentication slice of Increment 2 adds email/password sign-up and login. Listing setup remains planned.
+Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. Increment 2 adds authentication and durable listing and order models. Increment 3 adds verified Valkey listing publication, an atomic checkout slot claim method, and a guarded cancellation release method.
 
 ## Flow
 
@@ -34,7 +34,7 @@ The Express SQS worker long-polls SQS and idempotently upserts the durable order
 
 The mock payment page waits for MongoDB persistence, then uses `orderId` for owner-checked actions.
 
-The current order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. Payment callbacks, reconciliation, and slot release remain planned work.
+The current order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, and timestamps. Payment callbacks, reconciliation, and the release worker remain planned work. The guarded Valkey release method exists.
 
 After SQS supplies and validates the immutable binding, the first valid correlated payment outcome wins. A failure or expiry changes the order to `CANCELLED` and creates a pending release intent in one MongoDB transaction. Slot reallocation after order cancellation means that an Express worker returns the slot to the Valkey pool. A later checkout can claim it. The worker first verifies ownership and retries the guarded Valkey operation; the slot is not available immediately.
 
@@ -46,7 +46,7 @@ The [reliability facet](docs/reliability.md) records current safeguards and poss
 
 The package map is:
 
-- `packages/backend`: Express API, Better Auth email/password, listing and slot models, order model, and deterministic listing seed; listing publication, reads, SQS worker, and order transitions remain planned.
+- `packages/backend`: Express API, Better Auth email/password, listing and slot models, order model, listing publication, and deterministic demo seed; sale reads, SQS worker, and order transitions remain planned.
 - `packages/storefront`: Next.js browser experience.
 - `packages/checkout-processor`: AWS Lambda order creation, hot-path reservation, and SQS publication.
 - `packages/checkout-authorizer`: API Gateway REST REQUEST authorization, planned for a later increment.
@@ -82,7 +82,7 @@ The unique indexes allow one `PENDING` or `COMPLETE` order per customer and list
 
 A failed or expired payment releases the slot for a new checkout with a new idempotency key.
 
-Payment result handling, callback correlation, reconciliation, and cancellation release remain planned. The current order model has no payment fact fields.
+Payment result handling, callback correlation, reconciliation, and the cancellation release worker remain planned. The current order model has no payment fact fields.
 
 Real payment-provider integration is outside this take-home scope.
 
@@ -92,7 +92,7 @@ Read the design documents before runtime implementation.
 
 ## Gotchas
 
-The home page provides the API health check. Sign-up and login pages provide the current account flow. Listing, checkout, payment, and local service setup remain planned.
+The home page provides the API health check. Sign-up and login pages provide the current account flow. Listing and checkout routes, payment, and local service setup remain planned.
 
 The planned local URLs are not available.
 
@@ -145,7 +145,7 @@ git diff --check
 
 Use Node.js 24 and pnpm 11.20. Set `NEXT_PUBLIC_API_BASE_URL` at build time to configure the static storefront's browser API client. Local service URLs are not defined.
 
-The backend uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its development server uses port `3001`. Backend source uses the `#app`, `#api/*`, `#features/*`, and `#services/*` package imports.
+The backend uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its development server uses port `3001`. Backend source uses the `#app`, `#api/*`, `#features/*`, `#services/*`, and `#types` package imports.
 
 ## Change log
 

@@ -1,10 +1,11 @@
-import { Schema, type Connection } from 'mongoose'
 import {
   activeOrderStatuses,
   orderCollection,
   orderStatuses,
 } from '#features/order/constants'
 import type { OrderDocument } from '#features/order/types'
+import type { Models } from '#types'
+import { Schema, type Connection } from 'mongoose'
 
 const orderSchema = new Schema<OrderDocument>(
   {
@@ -45,6 +46,14 @@ orderSchema.index(
   },
 )
 
-export function createOrderModel(connection: Connection) {
-  return connection.model<OrderDocument>('Order', orderSchema, orderCollection)
+export function createOrderModel(
+  connection: Connection,
+): Pick<Models, 'OrdersModel'> {
+  return {
+    OrdersModel: connection.model<OrderDocument>(
+      'Order',
+      orderSchema,
+      orderCollection,
+    ),
+  }
 }

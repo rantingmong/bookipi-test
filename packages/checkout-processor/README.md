@@ -4,7 +4,7 @@
 
 The checkout processor will run as an AWS Lambda function for the purchase hot path.
 
-Increment 1 does not implement Lambda behavior. The processor stays separate from Express, and SQS remains its only bridge to Express.
+Increment 3 adds `src/features/inventory/feature.ts` for atomic Valkey slot claims. The Lambda handler and SQS publication remain planned.
 
 ## Flow
 
@@ -48,7 +48,7 @@ The Lambda will return a stable attempt result for safe retries.
 
 ## Gotchas
 
-This package has no source, runtime, dependencies, scripts, deployment file, or local URL. Increment 1 keeps Lambda behavior out of this package.
+This package has an inventory feature and TypeScript checks. It has no Lambda handler, SQS publisher, deployment file, or local URL.
 
 The Express SQS worker consumes the LocalStack queue. This design has no SQS-to-Lambda event source mapping.
 
@@ -58,7 +58,7 @@ This retry is best effort. There is no durable replay if Lambda stops after the 
 
 Standard SQS can deliver duplicate or out-of-order events. The backend worker handles them idempotently.
 
-Payment failure or expiration changes order status and releases its slot through a guarded operation in a future increment. The operation uses `orderId` as the slot owner.
+The backend listing feature provides the guarded Valkey release method. A future worker must confirm durable cancellation before it calls the method.
 
 ## Design links
 

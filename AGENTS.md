@@ -17,7 +17,7 @@ Read the root `README.md` and every applicable directory `README.md` before work
 - Use pnpm for package management.
 - Use Node.js 24 and TypeScript.
 - Use ECMAScript modules with `"type": "module"`.
-- Use backend `#app`, `#api/*`, `#features/*`, and `#services/*` package imports. Use the storefront `@/*` TypeScript alias.
+- Use backend `#app`, `#api/*`, `#features/*`, `#services/*`, and `#types` package imports. Use the storefront `@/*` TypeScript alias.
 - Do not add npm or Yarn lockfiles.
 - Do not guess commands. Confirm a command in a manifest or document before use.
 - Use the root Prettier configuration. Run `pnpm format:check` before completion.
@@ -36,6 +36,16 @@ Read the root `README.md` and every applicable directory `README.md` before work
 - Store Better Auth users and credentials in MongoDB. Store sessions only in Valkey secondary storage.
 - Do not add a MongoDB session fallback. A Valkey loss signs customers out.
 - Use one validated storefront origin for Better Auth trusted origins and Express CORS.
+
+## Lambda package organization
+
+Use the same source layout in `packages/checkout-authorizer` and `packages/checkout-processor`.
+
+- Put domain behavior in `src/features/<name>`.
+- Give each implemented feature a `README.md`, `feature.ts`, and focused `feature.test.ts`.
+- Put external integrations in `src/services/<name>`.
+- Parse required environment settings in `src/features/env` and pass validated settings into features and services.
+- Do not connect services or read required environment settings during a feature import.
 
 ## Storefront implementation decisions
 

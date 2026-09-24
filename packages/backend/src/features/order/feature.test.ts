@@ -46,7 +46,8 @@ describe('order feature', () => {
       })),
     }
 
-    createOrderModel(connection as never)
+    const models = createOrderModel(connection as never)
+    expect(models.OrdersModel).toBeDefined()
 
     expect(connection.model).toHaveBeenCalledWith(
       'Order',

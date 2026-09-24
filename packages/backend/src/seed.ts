@@ -1,28 +1,33 @@
-import { readMongoEnvConfig } from '#features/env/feature'
+import { readListingSeedEnvConfig } from '#features/env/feature'
 import { createListingModels } from '#features/listing/models'
-import { seedListingData } from '#features/listing/seed'
+import { createOrderModel } from '#features/order/models'
+import { seedListingData } from '#features/seed/feature'
 import { createMongoService } from '#services/mongodb/client'
+import { createValkeyService } from '#services/valkey/client'
 
 async function runSeed() {
-  const config = readMongoEnvConfig()
+  const config = readListingSeedEnvConfig()
   const mongo = createMongoService(config.mongoUri, config.mongoDatabase)
+  const valkey = createValkeyService(config.valkeyUrl)
 
   try {
-    await mongo.connect()
+    await Promise.all([mongo.connect(), valkey.client.connect()])
     const listingModels = createListingModels(mongo.connection)
+    const orderModels = createOrderModel(mongo.connection)
     await Promise.all([
       listingModels.ListingModel.init(),
       listingModels.ListingSlotModel.init(),
+      orderModels.OrdersModel.init(),
     ])
     await seedListingData({
-      connection: mongo.connection,
       ...listingModels,
+      ...orderModels,
+      mongoConnection: mongo.connection,
+      valkeyConnection: valkey.client,
     })
-    process.stdout.write(
-      'Seeded listing and slots. Valkey state is unchanged.\n',
-    )
+    process.stdout.write('Seeded listing, slots, and Valkey inventory.\n')
   } finally {
-    await mongo.close()
+    await Promise.allSettled([mongo.close(), valkey.client.quit()])
   }
 }
 
