@@ -88,7 +88,7 @@ This increment also adds the first checkout-processor feature: an atomic slot po
 
 ## Increment 4: checkout request and SQS publication
 
-Status: awaiting review.
+Status: implementation complete; verification and review evidence are pending.
 
 Angle A: Lambda owns atomic Valkey reservation and SQS publication.
 
@@ -100,7 +100,7 @@ Selection recorded by this design: Angle A.
 
 Reason: the hot path stays close to Valkey and scales independently from durable reads and writes.
 
-Planned verification: concurrent requests, no overselling, one item per user, stable `orderId` for the same `(listingId, trusted customerId, client idempotencyKey)` while Valkey state remains, cross-customer key isolation, best-effort publish retry, duplicate SQS delivery, and the documented crash gap after the Valkey pop.
+Unit verification covers request validation, trusted identity, atomic claim outcomes, stable same-key binding, best-effort publish retry, and the `order-reserved.v1` event shape. Valkey concurrency, no-oversell behavior, duplicate delivery, LocalStack publication, deployment, and the documented crash gap still need integration or deployment evidence.
 
 The atomic claim pops any one slot from the shared pool. The reserve count does not route claims. Reject checkout as sold out only when Valkey has no claimable slots. At most as many orders can reach `COMPLETE` as there are slot documents. Verify ten customers can complete with ten slots and `reserveSlots: 2`, then verify an 11th customer receives a sold-out result while the sale remains active.
 
@@ -195,3 +195,7 @@ Open choice: select the live storefront wording for the case where public remain
 - Selected contract-first OpenAPI YAML and added the increment 1 bootstrap scope.
 - Completed the email/password authentication slice of Increment 2. Listing setup remains pending.
 - Added the durable listing/order model foundation and deterministic listing seed. Listing publication remains pending.
+
+### 2026-09-24
+
+- Implemented increment 4 request handling, scoped Valkey reservation, and SQS publication. Integration and deployment evidence remain pending.

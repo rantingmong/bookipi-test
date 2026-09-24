@@ -20,7 +20,7 @@ sequenceDiagram
     V-->>L: Return orderId and slotId
     L->>Q: Publish immutable order event
     Q-->>L: Accept event
-    L-->>A: Return accepted order
+    L-->>A: Return 202 after SQS accepts event
 ```
 
 ### Persist reservation facts
@@ -38,13 +38,15 @@ sequenceDiagram
 
 The browser sends the checkout POST directly to the configured CloudFront endpoint with its Better Auth session cookie and `Origin` header. CloudFront forwards both values to the API Gateway REST API. The REQUEST Lambda authorizer checks `Origin` first. It rejects a missing or unapproved origin without calling Better Auth or reading Valkey. It checks the cookie and session only after the origin passes.
 
+Listing IDs use 1 to 128 ASCII letters, digits, underscores, or hyphens. The first character is a letter or digit. This rule keeps the ID inside its Valkey hash tag.
+
 Serve auth and checkout under the same host, or keep the checkout hostname within the Better Auth cookie scope. If the storefront and checkout origins differ, the storefront request uses `credentials: 'include'`. The exact hostnames remain a deployment choice.
 
 For different origins, configure credentialed CORS. Return the exact approved storefront origin in `Access-Control-Allow-Origin`, never `*`, and return `Access-Control-Allow-Credentials: true` on successful POST and relevant error responses. CloudFront must allow and forward `OPTIONS` and its preflight headers. The unauthenticated API Gateway `OPTIONS` method returns the exact origin and credentials headers, plus `Access-Control-Allow-Methods` and `Access-Control-Allow-Headers` for required values. It must not use the POST authorizer or invoke checkout. Same-origin checkout does not require a preflight.
 
-Express never invokes Lambda and never proxies the purchase request. SQS is the only Lambda-to-Express bridge. The client creates the idempotency key. Lambda validates but never creates or changes it. Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. A same-key retry returns or republishes the same binding. Lambda sends `orderId`, `customerId`, `listingId`, and `slotId` in `order-reserved.v1`. The Express SQS worker upserts MongoDB by `orderId`.
+Express never invokes Lambda and never proxies the purchase request. SQS is the only Lambda-to-Express bridge. The request contains `listingId` and the client-generated `idempotencyKey`. The handler reads trusted `customerId` only from `requestContext.authorizer.customerId` and ignores browser identity data. Lambda validates but never creates or changes the idempotency key. Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. It also allows one active order per customer and listing. A same-key retry returns and republishes the same binding. Lambda sends `eventType`, `orderId`, `customerId`, `listingId`, and `slotId` in `order-reserved.v1`. The Express SQS worker upserts MongoDB by `orderId`.
 
-Lambda returns an accepted result only after SQS accepts `order-reserved.v1`. The mock page waits until the SQS worker persists the order in MongoDB. It uses `orderId` for reads and owner-checked outcome actions.
+Lambda returns HTTP 202 with `{ orderId, status: "PENDING" }` only after SQS accepts `order-reserved.v1`. It returns HTTP 400 for invalid JSON or fields, HTTP 401 when trusted identity is missing, HTTP 409 for an unpublished listing, closed sale, sold-out pool, active order, or cancelled reservation, and HTTP 503 for retryable Valkey or SQS errors. The mock page waits until the SQS worker persists the order in MongoDB. It uses `orderId` for reads and owner-checked outcome actions.
 
 Valkey contains every slot document in one claimable pool. MongoDB derives `stockTotal` by counting slot documents and derives `publicStock = stockTotal - reserveSlots`. Checkout rejects a request as sold out only when its atomic operation finds no claimable slot.
 
@@ -64,11 +66,13 @@ Valkey contains every slot document in one claimable pool. MongoDB derives `stoc
 - The approved origin allowlist contains exact storefront origins. Deployment configuration supplies its values; this design does not hard-code an origin.
 - CORS and cookie `SameSite` settings do not replace the Origin check.
 - The result includes `orderId` and the checkout status.
-- The SQS event contains `orderId`, `customerId`, `listingId`, and `slotId`.
+- The successful result is HTTP 202 and includes `orderId` and `PENDING` status.
+- The SQS event contains only `eventType`, `orderId`, `customerId`, `listingId`, and `slotId`.
 - Lambda does not request Express. SQS is the only Lambda-to-Express bridge.
 - The same tuple reuses its order while Valkey retains the binding. It does not pop a second slot.
 - A cancelled attempt does not block a later attempt for the same customer and listing.
 - The same client key under another customer or listing creates an independent order.
+- Guarded cancellation release removes the active-customer hash field only when it matches the cancelled order.
 - MongoDB enforces one active order per customer and listing and one active owner per listing slot.
 - A future checkout with DynamoDB must make its conditional write the atomic slot claim. Streams and EventBridge Pipes then carry committed claims to SQS.
 
@@ -100,3 +104,8 @@ See [API Gateway REST Lambda authorizer guidance](https://docs.aws.amazon.com/ap
 - Made the mock page wait for the MongoDB binding before it enables owner-checked outcomes.
 - Split reservation publication from SQS fact persistence and removed the preflight exchange.
 - Defined the shared all-slot Valkey pool, sold-out check, and `stockTotal` completion limit.
+
+### 2026-09-24
+
+- Implemented the REST Lambda request handler, tuple-scoped Valkey reservation, and `order-reserved.v1` SQS publication.
+- Defined stable checkout HTTP status and error responses.

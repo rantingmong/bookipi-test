@@ -42,27 +42,44 @@ return 1
 `
 
 const releaseCancelledSlotScript = `
+local orderId = ARGV[1]
+local listingId = ARGV[2]
+local rawCustomerId = ARGV[3]
+local activeCustomerField = ARGV[4]
+local slotId = ARGV[5]
+local orderStatus = ARGV[6]
 if redis.call('HGET', KEYS[1], 'published') ~= '1' then
   return 0
 end
-if redis.call('HGET', KEYS[3], 'orderId') ~= ARGV[1] then
+local orderPrefix = orderId .. ':'
+if redis.call('HGET', KEYS[3], orderPrefix .. 'orderId') ~= orderId then
   return 0
 end
-if redis.call('HGET', KEYS[3], 'listingId') ~= ARGV[2] then
+if redis.call('HGET', KEYS[3], orderPrefix .. 'listingId') ~= listingId then
   return 0
 end
-if redis.call('HGET', KEYS[3], 'slotId') ~= ARGV[3] then
+if redis.call('HGET', KEYS[3], orderPrefix .. 'customerId') ~= rawCustomerId then
   return 0
 end
-if ARGV[4] ~= 'CANCELLED' then
+if redis.call('HGET', KEYS[3], orderPrefix .. 'slotId') ~= slotId then
+  return 0
+end
+if redis.call('HGET', KEYS[3], orderPrefix .. 'status') ~= 'PENDING' then
+  return 0
+end
+if orderStatus ~= 'CANCELLED' then
   return 0
 end
 if redis.call('EXISTS', KEYS[4]) == 1 then
   return 0
 end
-redis.call('HSET', KEYS[3], 'status', 'CANCELLED')
-redis.call('RPUSH', KEYS[2], ARGV[3])
-redis.call('HSET', KEYS[4], 'orderId', ARGV[1], 'slotId', ARGV[3])
+if redis.call('HGET', KEYS[5], activeCustomerField) ~= orderId then
+  return 0
+end
+redis.call('HSET', KEYS[3], orderPrefix .. 'status', 'CANCELLED')
+redis.call('RPUSH', KEYS[2], slotId)
+redis.call('HSET', KEYS[4], 'orderId', orderId, 'slotId', slotId)
+redis.call('HDEL', KEYS[5], activeCustomerField)
 return 1
 `
 
@@ -235,21 +252,26 @@ export async function releaseCancelledSlot(
   client: Redis,
   input: {
     listingId: string
+    customerId: string
     orderId: string
     slotId: string
     orderStatus: 'CANCELLED'
   },
 ): Promise<boolean> {
-  const { listingId, orderId, slotId, orderStatus } = input
+  const { listingId, customerId, orderId, slotId, orderStatus } = input
+  const activeCustomerField = encodeURIComponent(customerId)
   const result = await client.eval(
     releaseCancelledSlotScript,
-    4,
+    5,
     `sale:{${listingId}}:meta`,
     `sale:{${listingId}}:available-slots`,
-    `sale:{${listingId}}:order:${orderId}`,
+    `sale:{${listingId}}:orders`,
     `sale:{${listingId}}:order:${orderId}:release`,
+    `sale:{${listingId}}:active-customers`,
     orderId,
     listingId,
+    customerId,
+    activeCustomerField,
     slotId,
     orderStatus,
   )

@@ -26,8 +26,9 @@ sequenceDiagram
     A->>L: Invoke checkout
     L->>V: Atomically claim one slot for orderId
     V-->>L: Return orderId and slotId
-    L->>Q: Publish orderId, customerId, listingId, slotId
+    L->>Q: Publish order-reserved.v1 facts
     Q-->>L: Accept event
+    L-->>A: Return 202
     W->>Q: Receive order event
     W->>M: Persist order fields
     M-->>W: Confirm durable write
@@ -38,7 +39,7 @@ The browser sends the purchase request directly to the configured CloudFront che
 
 The API Gateway authorizer checks the Better Auth session in Valkey. MongoDB stores users, credentials, and business data. The authorizer does not call Express or MongoDB.
 
-The checkout Lambda claims a slot in Valkey and sends `orderId`, `customerId`, `listingId`, and `slotId` through SQS. SQS is the only Lambda-to-Express bridge. The Express worker persists the order before the mock payment page uses `orderId`.
+The checkout Lambda reads trusted `customerId` from API Gateway authorizer context. It atomically claims a slot in Valkey and sends `order-reserved.v1` with `orderId`, `customerId`, `listingId`, and `slotId` through SQS. It returns HTTP 202 only after SQS accepts the event. SQS is the only Lambda-to-Express bridge. The Express worker persists the order before the mock payment page uses `orderId`.
 
 The client creates the idempotency key. Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. MongoDB does not store the client key. A duplicate SQS event upserts by unique `orderId`.
 
@@ -47,6 +48,8 @@ The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`,
 The listing document stores identity, display name, sale window, and `reserveSlots`. The initial slot count is an operation parameter. MongoDB derives total stock from slot documents and derives public stock by subtracting `reserveSlots`. Valkey holds the live availability pool.
 
 The design has no durable replay for a Lambda crash after the Valkey pop and before SQS accepts the event.
+
+Increment 4 implements the REST Lambda handler, tuple-scoped Valkey claim, and SQS publisher. LocalStack and deployment checks remain pending.
 
 ## Facets
 
@@ -65,3 +68,7 @@ The design has no durable replay for a Lambda crash after the Valkey pop and bef
 
 - Recorded the minimal order model and SQS event shape.
 - Defined listing counts from slot documents and retained Valkey as the live inventory authority.
+
+### 2026-09-24
+
+- Recorded the checkout handler response after SQS accepts the reservation event.

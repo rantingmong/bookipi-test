@@ -2,9 +2,9 @@
 
 ## Purpose
 
-The checkout processor will run as an AWS Lambda function for the purchase hot path.
+The checkout processor runs as an AWS Lambda function for the purchase hot path.
 
-Increment 3 adds `src/features/inventory/feature.ts` for atomic Valkey slot claims. The Lambda handler and SQS publication remain planned.
+Increment 4 adds the API Gateway REST Lambda handler, atomic Valkey reservation, and SQS publication. `src/runtime.ts` creates and reuses clients on the first valid request. LocalStack and deployment checks remain pending.
 
 ## Flow
 
@@ -14,24 +14,27 @@ After `Origin` passes, the authorizer will check the Better Auth session in Valk
 
 The browser will call the CloudFront checkout endpoint. Express will not invoke Lambda or proxy the purchase request.
 
-The client will send its idempotency key with the checkout request. The Lambda will validate but not generate or change that key. Valkey will map `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. A same-key retry will return or republish the same binding.
+The request sends `listingId` and `idempotencyKey` as JSON. The handler reads trusted `customerId` only from `requestContext.authorizer.customerId`. It ignores a browser `customerId`. The Lambda validates but does not generate or change the idempotency key. Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. A same-key retry returns and republishes the same binding.
 
 The Lambda will use `orderId` as the slot-owner identifier. MongoDB will persist order fields without the idempotency key. Duplicate SQS delivery will upsert by `orderId`.
 
-The Lambda will atomically check the sale window, idempotency, and one-item-per-user rule in Valkey, then pop one slot from the shared pool. The pool contains every durable listing-slot document. MongoDB derives the total and public counts from those documents.
+The Lambda atomically checks publication, sale time, idempotency, and one active order per customer and listing in Valkey. It then pops one slot from the shared pool. The pool contains every durable listing-slot document. MongoDB derives the total and public counts from those documents. The listing-scoped `idempotency`, `active-customers`, and `orders` hashes store tuple, owner, and order data. Every script receives its Redis keys through `KEYS`. Guarded cancellation release clears the matching active-customer hash field.
 
 The same Valkey operation will create the reservation and idempotency binding.
 
-The Lambda will publish an order-reserved event to a Standard SQS queue. The event will contain `orderId`, `customerId`, `listingId`, and `slotId`.
+The Lambda publishes `order-reserved.v1` to a Standard SQS queue. The event contains `eventType`, `orderId`, `customerId`, `listingId`, and `slotId`.
 
 SQS will be the only Lambda-to-Express bridge. The Express worker will persist the binding in MongoDB.
 
-The Lambda will return a stable attempt result for safe retries.
+The Lambda returns HTTP 202 with `orderId` and `PENDING` only after SQS accepts the event. It returns stable JSON errors for invalid input, missing identity, unavailable inventory, and retryable service errors. An SQS failure leaves the Valkey claim in place. A same-key retry attempts publication again.
 
 ## Decisions & assumptions
 
 - Lambda owns hot-path Valkey reservation and SQS publication.
 - API Gateway supplies trusted identity. Lambda ignores browser-supplied `customerId` values.
+- Runtime settings are `VALKEY_URL` and `ORDER_EVENTS_QUEUE_URL`. The runtime reads them and creates clients on the first valid checkout request. Imports do not read settings or connect services.
+- `src/types.ts` defines the shared checkout and runtime dependency contracts. Request and result types stay with the checkout feature.
+- Listing IDs use 1 to 128 ASCII letters, digits, underscores, or hyphens. The first character is a letter or digit so it cannot change the Valkey hash tag.
 - The authorizer and checkout Lambda both need access to Valkey. Auth and inventory use separate key namespaces.
 - A Valkey outage denies auth and stops reservation. Do not fall back to MongoDB for session checks.
 - CORS and cookie `SameSite` settings do not replace the authorizer's required Origin check.
@@ -39,6 +42,7 @@ The Lambda will return a stable attempt result for safe retries.
 - `reserveSlots` reduces the advertised count derived from slot documents. At most as many orders can reach `COMPLETE` as there are slot documents.
 - The Lambda can claim any slot in the one Valkey pool. The atomic pop, not the reserve count, prevents two requests from claiming one slot.
 - A sold-out response requires an empty Valkey pool. A guarded cancellation release returns the slot to that same pool.
+- A listing and customer can hold one active Valkey reservation. Cancellation clears the matching active key after the backend confirms the cancelled order.
 - SQS is transport and is not the durable order store.
 - A retry uses the same `(listingId, trusted customerId, client idempotencyKey)` and reuses the reservation while Valkey retains its state.
 - A repeated logical attempt by the same customer for the same listing returns the same `orderId`; another customer cannot reuse that binding.
@@ -48,7 +52,7 @@ The Lambda will return a stable attempt result for safe retries.
 
 ## Gotchas
 
-This package has an inventory feature and TypeScript checks. It has no Lambda handler, SQS publisher, deployment file, or local URL.
+This package has a REST Lambda handler, checkout and inventory features, lazy Valkey and SQS clients, tests, type checks, and a build. It has no deployment file or local URL.
 
 The Express SQS worker consumes the LocalStack queue. This design has no SQS-to-Lambda event source mapping.
 
@@ -85,3 +89,8 @@ The backend listing feature provides the guarded Valkey release method. A future
 - Made SQS the only Lambda-to-Express bridge and stored candidate IDs in the atomic reservation for same-key reuse.
 - Defined the single-pool claim rule, physical completion limit, and sold-out authority.
 - Kept the Lambda package free of Express dependencies during the bootstrap increment.
+
+### 2026-09-24
+
+- Added the REST Lambda handler, validated runtime settings, and `order-reserved.v1` SQS publication.
+- Added scoped idempotency and the active-customer reservation key.
