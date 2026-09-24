@@ -16,11 +16,11 @@ Update the affected README and design document when a decision changes.
 
 ## Decisions & assumptions
 
-- Increment 0 is the current design-only increment.
+- Increment 0 records the system design. Increment 1 is complete. The authentication slice of Increment 2 is complete, and listing setup remains pending.
 - The selected stack remains pnpm, TypeScript, Express, Next.js static export, CloudFront, API Gateway, Lambda, MongoDB, Valkey, and LocalStack.
 - API Gateway REST API uses `packages/checkout-authorizer` for its separate REQUEST Lambda authorizer. It checks Better Auth sessions in Valkey.
 - Each future feature needs a user review before implementation if its angles change behavior or system boundaries.
-- Increment 1 provides the first runtime bootstrap. Later business increments remain planned.
+- Increment 1 provides the first runtime bootstrap. Listing and sale behavior after the authentication slice remains planned.
 
 ## Increment 0: repository shell and design record
 
@@ -54,17 +54,17 @@ Verification: package metadata validation, API generation, TypeScript checks, co
 
 ## Increment 2: Better Auth and listing setup
 
-Status: awaiting review.
+Status: authentication slice complete; listing setup remains pending.
 
 Angle A: keep Better Auth, listing creation, and seed orchestration in Express. Store Better Auth users and credentials in MongoDB, and sessions in Valkey secondary storage.
 
 Angle B: isolate authentication or listing setup into separate services.
 
-Selection recorded by this design: Angle A with Valkey secondary storage for sessions and MongoDB for users and credentials.
+Selection recorded by this design: Angle A with Valkey secondary storage for sessions and MongoDB for users and credentials. This increment implements email/password sign-up, login, session display, and sign-out. It does not implement listing setup.
 
 Reason: one backend boundary reduces coordination for the small take-home while keeping the hot path in Lambda.
 
-Planned verification: Better Auth MongoDB adapter tests, Valkey session tests, cookie validity, expiry and revocation, missing-session and Valkey-outage denial, no active-session refresh, expired-session cleanup, role-change handling, authenticated route tests, listing-slot uniqueness, and seed verification. Confirm that the authorizer makes no Express or MongoDB request.
+Authentication verification: focused tests cover required settings, storage selection, no MongoDB session fallback, session identity mapping, raw Express request ordering, and credentialed browser requests. MongoDB and Valkey integration, cookie expiry, revocation, listing-slot uniqueness, seed verification, and deployment authorizer checks remain pending. The separate authorizer makes no Express or MongoDB request.
 
 Listing setup keeps `stockTotal` as the true physical slot count and adds configurable `reserveSlots`. Validate integer counts, require `stockTotal > 0`, and enforce `0 <= reserveSlots <= stockTotal`. Derive `publicStock = stockTotal - reserveSlots`.
 
@@ -191,3 +191,4 @@ Open choice: select the live storefront wording for the case where public remain
 - Added cookie-scope, conditional CORS, preflight, and session-cleanup checks.
 - Recorded `stockTotal`, `reserveSlots`, `publicStock`, one-pool seeding and claims, and the unresolved live-stock display wording.
 - Selected contract-first OpenAPI YAML and added the increment 1 bootstrap scope.
+- Completed the email/password authentication slice of Increment 2. Listing setup remains pending.

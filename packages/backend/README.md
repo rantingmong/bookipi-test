@@ -2,11 +2,15 @@
 
 ## Purpose
 
-The backend will provide the Express API and the durable services around the sale.
+The backend provides the Express API and Better Auth email/password access. Listing and sale services remain planned.
 
 ## Runtime
 
-`src/server.ts` starts the Express API. `src/app.ts` mounts the API router. The current endpoint is `GET /api/system/health`.
+`src/server.ts` connects MongoDB and Valkey, builds the Better Auth feature, and starts the Express API. `src/app.ts` mounts Better Auth at `/api/auth/*splat` before JSON parsing. The API also exposes `GET /api/system/health`.
+
+The environment feature validates startup settings in `src/features/env`. The auth feature owns authentication behavior and session identity mapping in `src/features/auth`. The MongoDB and Valkey clients live in `src/services`.
+
+Set `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL`. Set `STOREFRONT_ORIGIN` when the storefront uses a different origin. Better Auth stores users and credentials in MongoDB and sessions in Valkey secondary storage under `bookipi:auth:`. Sessions do not fall back to MongoDB.
 
 Run `pnpm generate:api` before you start the backend in development. The root `typecheck`, `test`, and `build` scripts generate API code first.
 
@@ -14,7 +18,7 @@ The root OpenAPI file lists group configuration files. Each group file lists end
 
 Keep each endpoint's `openapi.yml` beside its tracked `handler.ts`. Each API group has an `openapi.yml` and `router.ts`. Put domain logic in `src/features/<name>` and external integrations in `src/services/<name>`. Use `types.ts` for internal types, Zod `schemas.ts` or `schema.ts` for external inputs and DTOs, and `models.ts` for MongoDB models only when needed. Add `constants.ts` only when a feature or service needs constants.
 
-The generator clears generated output before it runs. Keep business logic in tracked endpoint `handler.ts` files.
+The generator clears generated output before it runs. Keep API business logic in tracked endpoint `handler.ts` files. Keep authentication behavior in `src/features/auth`.
 
 Set `STOREFRONT_ORIGIN` to one exact origin when the browser app uses a different origin. The API adds CORS headers for that origin and handles its preflight requests. It rejects unmatched preflight requests. Leave the setting unset for same-origin use. Do not use `*` or a URL path.
 
@@ -92,7 +96,7 @@ Only `stockTotal` physical slots exist, including the configured reserve. The Va
 
 ## Gotchas
 
-The current health endpoint has no business storage. Authentication, workers, reconciler, migrations, and local service URLs are not implemented.
+The health endpoint has no business storage. Authentication is implemented. Listing setup, workers, reconciler, migrations, and local service URLs are not implemented.
 
 Do not make Express the hot-path inventory authority.
 
@@ -142,3 +146,4 @@ The system has no durable replay if Lambda stops after the Valkey pop and before
 - Added the Express bootstrap, OpenAPI health contract, endpoint handler, generated router, and request validation middleware.
 - Added exact-origin CORS for the optional static storefront origin.
 - Added dedicated session middleware tests and backend test-driven development guidance.
+- Added Better Auth email/password sign-up and login with MongoDB accounts and Valkey sessions.

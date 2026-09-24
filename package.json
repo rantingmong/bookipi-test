@@ -9,6 +9,8 @@
   },
   "type": "module",
   "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "generate:api": "node scripts/generate-api.mjs",
     "typecheck": "pnpm generate:api && pnpm --filter @bookipi/backend typecheck && pnpm --filter @bookipi/storefront typecheck",
     "test": "pnpm generate:api && pnpm --filter @bookipi/backend test && pnpm --filter @bookipi/storefront test",
@@ -18,6 +20,7 @@
     "@codewithagents/openapi-server": "2.2.1",
     "@redocly/cli": "2.54.2",
     "openapi-zod-ts": "2.3.0",
+    "prettier": "3.9.9",
     "yaml": "2.8.1"
   }
 }

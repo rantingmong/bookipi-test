@@ -20,6 +20,33 @@ Read the root `README.md` and every applicable directory `README.md` before work
 - Use the backend `#app` and `#api/*` package imports, and the storefront `@/*` TypeScript alias.
 - Do not add npm or Yarn lockfiles.
 - Do not guess commands. Confirm a command in a manifest or document before use.
+- Use the root Prettier configuration. Run `pnpm format:check` before completion.
+- Do not use ternary expressions. Use clear `if` statements or an IIFE when an expression is required.
+- Do not chain `??` defaults. Use ordered `if` statements when several fallbacks exist.
+
+## Backend implementation decisions
+
+- Put domain behavior in `src/features/<name>` and external integrations in `src/services/<name>`.
+- Give each implemented feature a `README.md`, `feature.ts`, and focused `feature.test.ts`.
+- Use `schema.ts` for externally defined Zod schemas, `constants.ts` for internal constants, `types.ts` for internal types, and `models.ts` for Mongoose models in backend features.
+- Use `schema.ts` for externally defined Zod schemas, `constants.ts` for internal constants, and `types.ts` for internal types in backend services.
+- Keep environment parsing in `src/features/env`. Pass validated settings into features and services.
+- Do not connect services or read required environment settings during a feature import.
+- Mount Better Auth before Express JSON parsing because Better Auth needs the raw request body.
+- Store Better Auth users and credentials in MongoDB. Store sessions only in Valkey secondary storage.
+- Do not add a MongoDB session fallback. A Valkey loss signs customers out.
+- Use one validated storefront origin for Better Auth trusted origins and Express CORS.
+
+## Storefront implementation decisions
+
+- Keep page UI in `src/app/<page>/page.tsx` and page state in `page.state.tsx`.
+- Keep generated clients behind tracked wrappers in `src/lib/features`.
+- Use React Hook Form for forms. Expose only `register`, a wrapped `submit`, and `formState` when practical.
+- Use `useSWRMutation` for user-triggered writes. Derive request feedback from mutation data and errors.
+- Keep changing UI state elements mounted. Use parent data attributes and Tailwind `group-data-*` visibility utilities.
+- Do not use conditional JSX for changing state elements. This avoids conflicts with browser translation engines.
+- Keep the session panel as the current identity source. Refresh it in the background after an auth write.
+- Tailwind uses theme and utility layers only. Do not enable Preflight without an explicit design decision.
 
 ## Branch and worktree rules
 

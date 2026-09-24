@@ -36,11 +36,11 @@ Standard SQS can duplicate and reorder events. The worker processes them idempot
 - `checkout-authorizer` owns the separate API Gateway REST REQUEST authorizer.
 - Valkey scopes idempotency by listing, authorizer-derived customer, and client key.
 - All packages use TypeScript and ECMAScript modules.
-- Increment 1 adds runtime bootstraps for the backend and storefront. Business features remain planned.
+- Increment 1 adds runtime bootstraps for the backend and storefront. Increment 2 adds email/password authentication. Listing and sale behavior remain planned.
 
 ## Gotchas
 
-The backend exposes the system health contract. It has no authentication, listing, inventory, or checkout behavior yet.
+The backend exposes the system health contract and Better Auth email/password routes. It has no listing, inventory, or checkout behavior yet.
 
 Do not add package scripts until the related runtime exists and its command is verified.
 
@@ -69,4 +69,5 @@ Read each package README before changing that package.
 - Moved Better Auth sessions to Valkey and recorded the REST REQUEST authorizer boundary.
 - Made SQS the only Lambda-to-Express bridge for immutable mock-payment bindings.
 - Required both payment and reservation facts before terminal state or slot release.
+- Added the Better Auth email/password feature to the Express backend.
 - Added the separate checkout-authorizer package and increment 1 runtime boundaries.
