@@ -6,7 +6,7 @@ This repository contains the bootstrap and shared contracts for a high-throughpu
 
 The source requirements define one configurable sale, one product, limited stock, one item per user, purchase status, purchase results, a React frontend, high throughput, resilience, no overselling, unit and integration tests, stress tests, a system diagram, and implementation documentation.
 
-Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. Increment 2 adds authentication and durable listing and order models. Increment 3 adds verified Valkey listing publication, atomic inventory methods, and guarded cancellation release. Increment 4 adds the checkout Lambda REST handler and SQS reservation event publication.
+Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. Increment 2 adds authentication and durable listing and order models. Increment 3 adds verified Valkey listing publication, atomic inventory methods, and guarded cancellation release. Increment 4 adds the checkout Lambda REST handler and SQS reservation event publication. Increment 5 adds an Express SQS worker that stores reservation facts in MongoDB.
 
 ## Flow
 
@@ -30,7 +30,7 @@ Serve auth and checkout under the same host, or keep the checkout hostname withi
 
 The client sends an idempotency key. Lambda validates but does not change it. Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. A same-key retry returns or republishes the same binding. Lambda sends `orderId`, `customerId`, `listingId`, and `slotId` in the SQS event. SQS is the only Lambda-to-Express bridge.
 
-The Express SQS worker long-polls SQS and idempotently upserts the durable order by `orderId`.
+The Express SQS worker long-polls SQS, validates each strict `order-reserved.v1` event, and upserts the durable order by `orderId`. It acknowledges a message only after MongoDB persistence succeeds. It does not overwrite conflicting facts or reopen a terminal order.
 
 The mock payment page waits for MongoDB persistence, then uses `orderId` for owner-checked actions.
 
@@ -46,7 +46,7 @@ The [reliability facet](docs/reliability.md) records current safeguards and poss
 
 The package map is:
 
-- `packages/backend`: Express API, Better Auth email/password, listing and slot models, order model, listing publication, and deterministic demo seed; sale reads, SQS worker, and order transitions remain planned.
+- `packages/backend`: Express API, Better Auth email/password, listing and slot models, order model, listing publication, deterministic demo seed, and SQS reservation worker; sale reads and order transitions remain planned.
 - `packages/storefront`: Next.js browser experience.
 - `packages/checkout-processor`: AWS Lambda request handling, hot-path reservation, and SQS publication.
 - `packages/checkout-authorizer`: API Gateway REST REQUEST authorization, planned for a later increment.
@@ -92,7 +92,7 @@ Read the design documents before runtime implementation.
 
 ## Gotchas
 
-The home page provides the API health check. Sign-up and login pages provide the current account flow. The checkout processor handles REST proxy requests, claims inventory in Valkey, and publishes `order-reserved.v1` to SQS. The storefront checkout flow, payment, SQS consumer, local service setup, and deployment remain planned.
+The home page provides the API health check. Sign-up and login pages provide the current account flow. The checkout processor handles REST proxy requests, claims inventory in Valkey, and publishes `order-reserved.v1` to SQS. Backend startup requires `AWS_REGION` and `SQS_QUEUE_URL` and starts the SQS worker after MongoDB indexes initialize. The storefront checkout flow, payment, local service setup, and deployment remain planned.
 
 The planned local URLs are not available.
 
@@ -175,3 +175,4 @@ The backend uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its
 ### 2026-09-24
 
 - Added the checkout Lambda handler, tuple-scoped Valkey reservation, and SQS publication for increment 4.
+- Added the Express SQS worker and idempotent MongoDB persistence for increment 5. AWS SQS and MongoDB integration checks remain pending.

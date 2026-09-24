@@ -7,3 +7,5 @@ export type OrderDocument = OrderInput & {
   createdAt?: Date
   updatedAt?: Date
 }
+
+export type ReservationFacts = Omit<OrderInput, 'status'>

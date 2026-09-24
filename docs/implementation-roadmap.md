@@ -21,6 +21,7 @@ Update the affected README and design document when a decision changes.
 - Increment 2 implementation and focused verification are complete. Integration evidence remains pending.
 - Increment 3 implements listing publication and inventory methods. Sale routes remain planned.
 - Increment 4 implementation, local verification, and internal reviews are complete. Integration and deployment evidence remain pending.
+- Increment 5 implementation and local verification are complete. AWS SQS and MongoDB integration evidence remain pending.
 - The selected stack remains pnpm, TypeScript, Express, Next.js static export, CloudFront, API Gateway, Lambda, MongoDB, Valkey, and LocalStack.
 - API Gateway REST API uses `packages/checkout-authorizer` for its separate REQUEST Lambda authorizer. It checks Better Auth sessions in Valkey.
 - Each future feature needs a user review before implementation if its angles change behavior or system boundaries.
@@ -110,7 +111,7 @@ The atomic claim pops any one slot from the shared pool. The reserve count does 
 
 ## Increment 5: durable reservation facts
 
-Status: awaiting review.
+Status: implemented and locally verified. AWS SQS and MongoDB integration evidence remain pending.
 
 Angle A: let the Express SQS worker upsert minimal order fields directly into MongoDB by `orderId`.
 
@@ -120,7 +121,9 @@ Selection recorded by this design: Angle A.
 
 Reason: the selected path keeps the first implementation small while the unique `orderId` index makes event replay idempotent.
 
-Planned verification: duplicate and reordered events, acknowledgement timing, durable order facts, and idempotent handling of Standard SQS delivery.
+Unit verification covers worker settings, strict event validation, SQS long polling and acknowledgement commands, idempotent order upsert, terminal-status preservation, and conflict rejection. AWS SQS delivery, MongoDB persistence before acknowledgement, retry, and dead-letter behavior remain pending integration or deployment checks.
+
+The worker long-polls SQS directly. It stores `orderId`, `customerId`, `listingId`, and `slotId` as immutable reservation facts, then acknowledges the message. It does not reset an existing order status. A conflicting event stays unacknowledged for queue redrive handling.
 
 ## Increment 6: mock payment session and page
 
@@ -204,3 +207,4 @@ Open choice: select the live storefront wording for the case where public remain
 
 - Implemented increment 4 request handling, scoped Valkey reservation, and SQS publication. Integration and deployment evidence remain pending.
 - Corrected the Increment 2 and Increment 4 status summaries after local verification and review.
+- Implemented the Increment 5 Express SQS worker and immutable order persistence. AWS SQS and MongoDB integration evidence remain pending.
