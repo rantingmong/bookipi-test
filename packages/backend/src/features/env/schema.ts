@@ -78,3 +78,8 @@ export const orderWorkerEnvSchema = z.object({
   AWS_REGION: requiredEnvValue('AWS_REGION'),
   SQS_QUEUE_URL: requiredEnvValue('SQS_QUEUE_URL'),
 })
+
+export const mockPaymentEnvSchema = z.object({
+  NODE_ENV: z.string().optional(),
+  MOCK_PAYMENT_ENABLED: z.enum(['true', 'false']).optional(),
+})

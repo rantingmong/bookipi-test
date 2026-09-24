@@ -3,10 +3,28 @@ import type { RequestHandler } from 'express'
 
 import { apiRouter } from '#api/router'
 import { corsMiddleware } from '#api/middleware/cors'
+import { createOrdersRouter } from '#api/orders/router'
+import type { SessionIdentity } from '#api/middleware/require-session'
+import type { OrderDocument } from '#features/order/types'
+import type { Model } from 'mongoose'
 
-type AppOptions = { authHandler?: RequestHandler; storefrontOrigin?: string }
+type AppOptions = {
+  authHandler?: RequestHandler
+  storefrontOrigin?: string
+  ordersModel?: Pick<Model<OrderDocument>, 'findOne' | 'findOneAndUpdate'>
+  resolveSession?: (
+    request: express.Request,
+  ) => Promise<SessionIdentity | undefined>
+  mockPaymentEnabled?: boolean
+}
 
-export function createApp({ authHandler, storefrontOrigin }: AppOptions = {}) {
+export function createApp({
+  authHandler,
+  storefrontOrigin,
+  ordersModel,
+  resolveSession,
+  mockPaymentEnabled = false,
+}: AppOptions = {}) {
   const app = express()
 
   app.disable('x-powered-by')
@@ -14,6 +32,12 @@ export function createApp({ authHandler, storefrontOrigin }: AppOptions = {}) {
   if (authHandler) app.all('/api/auth/*splat', authHandler)
   app.use(express.json())
   app.use('/api', apiRouter)
+  if (ordersModel && resolveSession) {
+    app.use(
+      '/api',
+      createOrdersRouter({ ordersModel, resolveSession, mockPaymentEnabled }),
+    )
+  }
 
   app.use(
     (

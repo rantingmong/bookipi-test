@@ -66,7 +66,11 @@ describe('checkout Lambda REST handler', () => {
       ),
     ).resolves.toMatchObject({
       statusCode: 202,
-      body: JSON.stringify({ orderId, status: 'PENDING' }),
+      body: JSON.stringify({
+        orderId,
+        status: 'PENDING',
+        redirectUrl: `/payment?orderId=${orderId}`,
+      }),
     })
 
     expect(evalMock).toHaveBeenCalledOnce()

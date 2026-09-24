@@ -26,7 +26,7 @@ The Lambda publishes `order-reserved.v1` to a Standard SQS queue. The event cont
 
 SQS will be the only Lambda-to-Express bridge. The Express worker will persist the binding in MongoDB.
 
-The Lambda returns HTTP 202 with `orderId` and `PENDING` only after SQS accepts the event. It returns stable JSON errors for invalid input, missing identity, unavailable inventory, and retryable service errors. An SQS failure leaves the Valkey claim in place. A same-key retry attempts publication again.
+The Lambda returns HTTP 202 with `orderId`, `PENDING`, and a relative `redirectUrl` only after SQS accepts the event. The payment feature creates that redirect from the same UUID order ID. It has no provider, persistent session, network call, or new environment setting. It returns stable JSON errors for invalid input, missing identity, unavailable inventory, and retryable service errors. An SQS failure leaves the Valkey claim in place. A same-key retry attempts publication again and can create the same redirect.
 
 ## Decisions & assumptions
 
@@ -34,6 +34,7 @@ The Lambda returns HTTP 202 with `orderId` and `PENDING` only after SQS accepts 
 - API Gateway supplies trusted identity. Lambda ignores browser-supplied `customerId` values.
 - Runtime settings are `VALKEY_URL` and `ORDER_EVENTS_QUEUE_URL`. The runtime reads them and creates clients on the first valid checkout request. Imports do not read settings or connect services.
 - `src/types.ts` defines the shared checkout and runtime dependency contracts. Request and result types stay with the checkout feature.
+- `src/features/payment` creates a validated relative mock payment redirect. Checkout calls it after reservation publication succeeds.
 - Listing IDs use 1 to 128 ASCII letters, digits, underscores, or hyphens. The first character is a letter or digit so it cannot change the Valkey hash tag.
 - The authorizer and checkout Lambda both need access to Valkey. Auth and inventory use separate key namespaces.
 - A Valkey outage denies auth and stops reservation. Do not fall back to MongoDB for session checks.
@@ -93,4 +94,5 @@ The backend listing feature provides the guarded Valkey release method. A future
 ### 2026-09-24
 
 - Added the REST Lambda handler, validated runtime settings, and `order-reserved.v1` SQS publication.
+- Added the payment-session redirect after SQS publication and included it in the HTTP 202 response.
 - Added scoped idempotency and the active-customer reservation key.

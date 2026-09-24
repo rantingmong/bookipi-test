@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The storefront provides the API health shell and Better Auth sign-up and login pages. Sale status, purchase, and result screens remain planned.
+The storefront provides the API health shell, Better Auth sign-up and login pages, and the mock payment page. Sale status, purchase, and result screens remain planned.
 
 ## Runtime
 
@@ -12,9 +12,11 @@ The `/sign-up` page registers the name, email, and password fields with React Ho
 
 The auth pages keep feedback and session elements in the document. Tailwind CSS group data attributes control their visibility. Auth feedback reports the completed request. The session panel shows the current session. The Tailwind setup omits Preflight to preserve browser default styles. A session refresh error appears separately from auth feedback.
 
+The `/payment?orderId=...` page reads the order with the generated client wrapper and includes browser credentials. It polls while the SQS worker has not stored the order. It shows success and failure controls only after the API confirms the signed-in owner and the build sets `NEXT_PUBLIC_MOCK_PAYMENT_ENABLED=true`. It shows the final `COMPLETE` or `CANCELLED` status after the API returns it.
+
 Run `pnpm generate:api` from the repository root to update the ignored browser client. Keep tracked feature wrappers under `src/lib/features`.
 
-Keep page UI in `src/app/<page>/page.tsx` and its state hook in `page.state.tsx`. Put page-specific components in `parts`, shared hooks in `src/hooks`, generated client code in `src/lib/api/generated`, tracked client wrappers in `src/lib/features`, and shared UI components in `src/ui`. Create these directories when their first file is needed.
+Keep page UI in `src/app/<page>/page.tsx` and its state hook in `page.state.tsx`. Put page-specific components in `parts`, shared hooks in `src/hooks`, generated client code in `src/lib/api/generated`, tracked client wrappers and shared feature state in `src/lib/features`, and shared UI components in `src/ui`. Create these directories when their first file is needed.
 
 ## Flow
 
@@ -32,7 +34,7 @@ The storefront will show accepted, retryable, sold-out, and completed purchase s
 
 The listing advertises the slot-document count minus `reserveSlots`. Checkout reports sold out only when Valkey has no claimable slot.
 
-A future mock payment page will show a pending state until the Express SQS worker stores the MongoDB order. It will use `orderId` and show success and failure buttons only after Express checks the authenticated owner.
+The `/payment?orderId=...` page shows a pending state until the Express SQS worker stores the MongoDB order. It uses `orderId` and shows success and failure buttons only after Express checks the authenticated owner.
 
 The mock page will call the owner-checked, local or test-only outcome route after the order exists.
 
@@ -40,7 +42,7 @@ The page acts on `orderId`. Provider callback handling remains planned.
 
 The page requires the authenticated order owner and a local or test-only feature flag.
 
-The backend disables the mock outcome route outside local and test environments.
+The backend enables the mock outcome route only when `MOCK_PAYMENT_ENABLED=true` and `NODE_ENV` is `development` or `test`. Set `NEXT_PUBLIC_MOCK_PAYMENT_ENABLED=true` at build time to show the controls. Both settings must enable the feature.
 
 ## Decisions & assumptions
 
@@ -50,12 +52,12 @@ The backend disables the mock outcome route outside local and test environments.
 - The storefront does not write MongoDB or Valkey.
 - The browser does not send its purchase request to Express.
 - The API Gateway REST REQUEST Lambda authorizer checks the Better Auth session in Valkey and supplies trusted `customerId`. The browser cannot set the trusted identity.
-- The mock payment page is a future test feature and is not implemented in this increment.
+- The mock payment page supports local testing. It does not send provider callbacks or release cancelled slots.
 - Checkout details will follow `docs/checkout.md`. Result details will follow `docs/orders.md`.
 
 ## Gotchas
 
-The storefront has sign-up and login pages. Listing, purchase, and result screens are not implemented. No local API URL is defined.
+The storefront has sign-up, login, and mock payment pages. Listing, purchase, and result screens are not implemented. Set `NEXT_PUBLIC_API_BASE_URL` at build time for the API origin.
 
 Do not use React Router for this package.
 
@@ -89,3 +91,8 @@ The browser cannot self-assert payment success in a real deployment.
 - Added the static-export Next.js app shell and browser API health check.
 - Added SWR for the deferred health request and kept the generated client behind the tracked feature wrapper.
 - Added dedicated sign-up and login pages with session display and sign-out.
+
+### 2026-09-24
+
+- Added the static mock payment page and credentialed order client wrapper. Browser checks remain pending.
+- Moved payment order state under `src/lib/features` and page content under `src/app/payment/parts`.

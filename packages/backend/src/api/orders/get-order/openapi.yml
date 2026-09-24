@@ -1,0 +1,52 @@
+openapi: 3.1.0
+info:
+  title: Read order
+  version: 1.0.0
+paths:
+  /orders/{orderId}:
+    get:
+      operationId: getOrder
+      summary: Read an order owned by the current customer
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Persisted order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          description: Authentication required
+        '404':
+          description: Order is absent or is not owned by the customer
+components:
+  schemas:
+    Order:
+      type: object
+      additionalProperties: false
+      required:
+        [orderId, customerId, listingId, slotId, status, createdAt, updatedAt]
+      properties:
+        orderId:
+          type: string
+        customerId:
+          type: string
+        listingId:
+          type: string
+        slotId:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, COMPLETE, CANCELLED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

@@ -127,17 +127,17 @@ The worker long-polls SQS directly. It stores `orderId`, `customerId`, `listingI
 
 ## Increment 6: mock payment session and page
 
-Status: awaiting review.
+Status: implemented and locally verified. Browser, MongoDB, SQS, and deployment evidence remain pending.
 
-Angle A: add a Next.js mock payment page with success and failure buttons. The page uses `orderId` after the SQS worker persists the order.
+Angle A: add a Next.js mock payment page with success and failure buttons, and create its payment redirect in the checkout processor after SQS accepts reservation facts. The page uses `orderId` after the SQS worker persists the order.
 
 Angle B: run a separate local payment emulator and connect the storefront to its callback endpoint.
 
-Selection recorded by this design: Angle A. Lambda creates `orderId` before the atomic Valkey claim. The SQS event carries `orderId`, `customerId`, `listingId`, and `slotId` to the Express worker. The page waits for MongoDB persistence before it shows owner-checked buttons.
+Selection recorded by this design: Angle A. Lambda creates `orderId` before the atomic Valkey claim. The SQS event carries `orderId`, `customerId`, `listingId`, and `slotId` to the Express worker. After SQS accepts the event, the payment feature returns the relative `/payment?orderId=<encoded id>` redirect. The page waits for MongoDB persistence before it shows owner-checked buttons. The backend payment feature owns the local or test outcome transition.
 
 Reason: the page uses the existing order identity without adding a second local service.
 
-Planned verification: page pending state, success, failure, expiry, owner checks, and order reads by `orderId`. Provider callbacks remain outside this increment.
+Local verification covers API generation, order reads, owner checks, disabled-route behavior, payment redirect creation, success, failure, expiry, same-result retries, conflicting outcomes, the storefront client wrapper, type checks, package tests, static export, formatting, and diff checks. Provider callbacks remain outside this increment.
 
 ## Increment 7: unified order reconciliation and durable slot release
 
@@ -208,3 +208,4 @@ Open choice: select the live storefront wording for the case where public remain
 - Implemented increment 4 request handling, scoped Valkey reservation, and SQS publication. Integration and deployment evidence remain pending.
 - Corrected the Increment 2 and Increment 4 status summaries after local verification and review.
 - Implemented the Increment 5 Express SQS worker and immutable order persistence. AWS SQS and MongoDB integration evidence remain pending.
+- Implemented Increment 6 with the static mock payment page, authenticated order reads, a post-SQS relative payment redirect, and local or test payment outcomes. Browser, MongoDB, SQS, and deployment evidence remain pending.

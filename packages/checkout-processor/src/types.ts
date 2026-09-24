@@ -1,6 +1,7 @@
 import type { SQSClient } from '@aws-sdk/client-sqs'
 import type { OrderReservedEvent } from './features/checkout/schema.js'
 import type { InventoryClaim } from './features/inventory/feature.js'
+import type { PaymentSession } from './features/payment/feature.js'
 import { createValkeyClient } from './services/valkey/feature.js'
 
 export type RuntimeClients = {
@@ -18,4 +19,5 @@ export type CheckoutDependencies = {
   }) => Promise<InventoryClaim>
   publish: (event: OrderReservedEvent) => Promise<void>
   createOrderId: () => string
+  startPaymentSession: (orderId: string) => PaymentSession
 }

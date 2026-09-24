@@ -1,0 +1,43 @@
+openapi: 3.1.0
+info:
+  title: Apply mock payment outcome
+  version: 1.0.0
+paths:
+  /orders/{orderId}/mock-outcome:
+    post:
+      operationId: postMockOutcome
+      summary: Apply a local mock payment outcome to an owned order
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [outcome]
+              properties:
+                outcome:
+                  type: string
+                  enum: [success, failure, expired]
+      responses:
+        '200':
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: '../get-order/openapi.yml#/components/schemas/Order'
+        '400':
+          description: Invalid mock outcome
+        '401':
+          description: Authentication required
+        '404':
+          description: Mock outcomes are disabled or order is absent or not owned
+        '409':
+          description: Order already has a conflicting terminal result

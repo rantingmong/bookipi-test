@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { app as defaultApp, createApp } from '#app'
 import { readEnvConfig } from '#features/env/feature'
@@ -111,6 +111,237 @@ describe('createApp', () => {
             return
           }
           resolve()
+        })
+      })
+    }
+  })
+
+  it('protects order reads and hides absent or non-owned orders', async () => {
+    const order = {
+      orderId: 'order-001',
+      customerId: 'customer-001',
+      listingId: 'listing-001',
+      slotId: 'listing-001:slot:0001',
+      status: 'PENDING',
+      createdAt: new Date('2026-09-24T00:00:00.000Z'),
+      updatedAt: new Date('2026-09-24T00:00:00.000Z'),
+    }
+    const findOne = async (query: Record<string, string>) => {
+      if (
+        query.orderId === 'order-001' &&
+        query.customerId === 'customer-001'
+      ) {
+        return order
+      }
+      return null
+    }
+    const app = createApp({
+      ordersModel: { findOne, findOneAndUpdate: async () => null } as never,
+      resolveSession: async () => ({ customerId: 'customer-001' }),
+    })
+    const server = app.listen(0)
+    const address = server.address()
+    if (!address || typeof address === 'string')
+      throw new Error('Expected a TCP address')
+
+    try {
+      const ownedResponse = await fetch(
+        `http://127.0.0.1:${address.port}/api/orders/order-001`,
+      )
+      expect(ownedResponse.status).toBe(200)
+      expect(await ownedResponse.json()).toMatchObject({
+        orderId: 'order-001',
+        customerId: 'customer-001',
+        status: 'PENDING',
+      })
+
+      const absentResponse = await fetch(
+        `http://127.0.0.1:${address.port}/api/orders/missing`,
+      )
+      expect(absentResponse.status).toBe(404)
+      expect(await absentResponse.json()).toEqual({ error: 'Not found' })
+
+      const anonymousApp = createApp({
+        ordersModel: { findOne, findOneAndUpdate: async () => null } as never,
+        resolveSession: async () => undefined,
+      })
+      const anonymousServer = anonymousApp.listen(0)
+      const anonymousAddress = anonymousServer.address()
+      if (!anonymousAddress || typeof anonymousAddress === 'string')
+        throw new Error('Expected a TCP address')
+      const anonymousResponse = await fetch(
+        `http://127.0.0.1:${anonymousAddress.port}/api/orders/order-001`,
+      )
+      expect(anonymousResponse.status).toBe(401)
+      await new Promise<void>((resolve, reject) => {
+        anonymousServer.close((error) => {
+          if (error) reject(error)
+          else resolve()
+        })
+      })
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error)
+          else resolve()
+        })
+      })
+    }
+  })
+
+  it('hides mock outcomes when disabled and applies an enabled outcome', async () => {
+    let status = 'PENDING'
+    const order = {
+      orderId: 'order-001',
+      customerId: 'customer-001',
+      listingId: 'listing-001',
+      slotId: 'listing-001:slot:0001',
+      get status() {
+        return status
+      },
+      createdAt: new Date('2026-09-24T00:00:00.000Z'),
+      updatedAt: new Date('2026-09-24T00:00:00.000Z'),
+    }
+    const ordersModel = {
+      findOne: async () => order,
+      findOneAndUpdate: async (
+        _filter: unknown,
+        update: { $set: { status: string } },
+      ) => {
+        if (status !== 'PENDING') return null
+        status = update.$set.status
+        return order
+      },
+    }
+    const resolver = vi.fn(async () => ({ customerId: 'customer-001' }))
+    const disabledApp = createApp({
+      ordersModel: ordersModel as never,
+      resolveSession: resolver,
+      mockPaymentEnabled: false,
+    })
+    const disabledServer = disabledApp.listen(0)
+    const disabledAddress = disabledServer.address()
+    if (!disabledAddress || typeof disabledAddress === 'string')
+      throw new Error('Expected a TCP address')
+
+    try {
+      const disabledResponse = await fetch(
+        `http://127.0.0.1:${disabledAddress.port}/api/orders/order-001/mock-outcome`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ outcome: 'success' }),
+        },
+      )
+      expect(disabledResponse.status).toBe(404)
+      expect(await disabledResponse.json()).toEqual({
+        error: 'Not found',
+        issues: [],
+      })
+      expect(resolver).not.toHaveBeenCalled()
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        disabledServer.close((error) => {
+          if (error) reject(error)
+          else resolve()
+        })
+      })
+    }
+
+    const enabledApp = createApp({
+      ordersModel: ordersModel as never,
+      resolveSession: resolver,
+      mockPaymentEnabled: true,
+    })
+    const enabledServer = enabledApp.listen(0)
+    const enabledAddress = enabledServer.address()
+    if (!enabledAddress || typeof enabledAddress === 'string')
+      throw new Error('Expected a TCP address')
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${enabledAddress.port}/api/orders/order-001/mock-outcome`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ outcome: 'success' }),
+        },
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ status: 'COMPLETE' })
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        enabledServer.close((error) => {
+          if (error) reject(error)
+          else resolve()
+        })
+      })
+    }
+  })
+
+  it('accepts expiry, retries the same result, and rejects a conflict', async () => {
+    let status = 'PENDING'
+    const order = {
+      orderId: 'order-expire',
+      customerId: 'customer-001',
+      listingId: 'listing-001',
+      slotId: 'listing-001:slot:0001',
+      get status() {
+        return status
+      },
+      createdAt: new Date('2026-09-24T00:00:00.000Z'),
+      updatedAt: new Date('2026-09-24T00:00:00.000Z'),
+    }
+    const ordersModel = {
+      findOne: async () => order,
+      findOneAndUpdate: async (
+        _filter: unknown,
+        update: { $set: { status: string } },
+      ) => {
+        if (status !== 'PENDING') return null
+        status = update.$set.status
+        return order
+      },
+    }
+    const app = createApp({
+      ordersModel: ordersModel as never,
+      resolveSession: async () => ({ customerId: 'customer-001' }),
+      mockPaymentEnabled: true,
+    })
+    const server = app.listen(0)
+    const address = server.address()
+    if (!address || typeof address === 'string')
+      throw new Error('Expected a TCP address')
+    const port = address.port
+
+    async function submit(outcome: unknown) {
+      return fetch(
+        `http://127.0.0.1:${port}/api/orders/order-expire/mock-outcome`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ outcome }),
+        },
+      )
+    }
+
+    try {
+      expect((await submit('invalid')).status).toBe(400)
+      const expired = await submit('expired')
+      expect(expired.status).toBe(200)
+      expect(await expired.json()).toMatchObject({ status: 'CANCELLED' })
+
+      const retry = await submit('expired')
+      expect(retry.status).toBe(200)
+      expect(await retry.json()).toMatchObject({ status: 'CANCELLED' })
+
+      const conflict = await submit('success')
+      expect(conflict.status).toBe(409)
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error)
+          else resolve()
         })
       })
     }

@@ -11,6 +11,9 @@ function createDependencies(
     claim,
     publish: vi.fn().mockResolvedValue(undefined),
     createOrderId: vi.fn(() => candidateOrderId),
+    startPaymentSession: vi.fn((orderId) => ({
+      redirectUrl: `/payment?orderId=${encodeURIComponent(orderId)}`,
+    })),
   }
 }
 
@@ -57,7 +60,11 @@ describe('checkout feature', () => {
       dependencies,
     )
 
-    expect(result).toEqual({ orderId: candidateOrderId, status: 'PENDING' })
+    expect(result).toEqual({
+      orderId: candidateOrderId,
+      status: 'PENDING',
+      redirectUrl: `/payment?orderId=${candidateOrderId}`,
+    })
     expect(dependencies.createOrderId).toHaveBeenCalledOnce()
     expect(claim).toHaveBeenCalledWith({
       listingId: 'sale-1',
@@ -72,22 +79,39 @@ describe('checkout feature', () => {
       listingId: 'sale-1',
       slotId: 'sale-1:slot:0001',
     })
+    expect(dependencies.startPaymentSession).toHaveBeenCalledWith(
+      candidateOrderId,
+    )
+    const publishOrder = vi.mocked(dependencies.publish).mock
+      .invocationCallOrder[0]
+    const sessionOrder = vi.mocked(dependencies.startPaymentSession).mock
+      .invocationCallOrder[0]
+    expect(publishOrder).toBeDefined()
+    expect(sessionOrder).toBeDefined()
+    expect(publishOrder).toBeLessThan(sessionOrder ?? 0)
   })
 
   it('publishes the original reservation when a same-key retry finds it', async () => {
+    const retryOrderId = '00000000-0000-4000-8000-000000000002'
     const claim = vi.fn().mockResolvedValue({
       status: 'reserved',
-      orderId: '00000000-0000-4000-8000-000000000002',
+      orderId: retryOrderId,
       slotId: 'sale-1:slot:0001',
     })
     const dependencies = createDependencies(claim)
 
-    await startCheckout(
+    const result = await startCheckout(
       { listingId: 'sale-1', idempotencyKey: 'same-key' },
       'customer-1',
       dependencies,
     )
 
+    expect(result).toEqual({
+      orderId: retryOrderId,
+      status: 'PENDING',
+      redirectUrl: `/payment?orderId=${retryOrderId}`,
+    })
+    expect(dependencies.startPaymentSession).toHaveBeenCalledWith(retryOrderId)
     expect(claim).toHaveBeenCalledWith(
       expect.objectContaining({ idempotencyKey: 'same-key' }),
     )
@@ -112,6 +136,7 @@ describe('checkout feature', () => {
       ),
     ).resolves.toEqual({ status: 'sold-out' })
     expect(dependencies.publish).not.toHaveBeenCalled()
+    expect(dependencies.startPaymentSession).not.toHaveBeenCalled()
   })
 
   it('propagates a reservation publication failure', async () => {
@@ -134,5 +159,6 @@ describe('checkout feature', () => {
       ),
     ).rejects.toThrow('SQS unavailable')
     expect(dependencies.publish).toHaveBeenCalledOnce()
+    expect(dependencies.startPaymentSession).not.toHaveBeenCalled()
   })
 })

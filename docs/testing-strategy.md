@@ -26,9 +26,11 @@ Current tests cover:
 - Valkey seed and publication calls, post-transaction order, claim script boundaries, and guarded release calls.
 - Better Auth configuration, session storage, identity mapping, Express request order, CORS, and storefront auth calls.
 - Checkout request validation, authorizer identity handling, stable REST error responses, same-key republishing, retryable SQS failures, and the exact `order-reserved.v1` message shape.
+- Payment session UUID validation, relative redirect construction, post-publication checkout ordering, redirect response mapping, and same-key redirect recreation.
 - Checkout processor environment validation and lazy runtime client creation.
 - Atomic inventory claim script boundaries, tuple-scoped key selection, sale window outcomes, active-order rejection, and cancellation outcomes.
 - Order worker environment validation, SQS long-poll settings, strict event validation, acknowledgement command, reservation upsert replay, timestamp and terminal-status preservation, and conflicting-fact rejection.
+- Payment outcome validation, atomic `PENDING` transitions, same-result retry, conflicting terminal rejection, local or test environment gating, owner checks, expiry handling, and order reads.
 
 These tests do not prove MongoDB or Valkey integration.
 
@@ -52,7 +54,7 @@ LocalStack tests will cover SQS delivery, duplicate messages, retry behavior, an
 
 Playwright will verify sign-up, sign-in, session display, listing display, one purchase, same-key retry, sold-out response, and purchase result reads.
 
-The mock payment page will wait until the SQS worker persists the order. It will use `orderId` for owner checks and outcome actions. Payment routes and order transitions remain planned work.
+The `/payment?orderId=...` page polls until the SQS worker persists the order. It shows outcome controls only after the authenticated API confirms ownership. Browser tests will verify pending, owner-not-found, request error, success, and cancellation states. Provider callbacks and slot release remain planned work.
 
 Deployment checks will verify CloudFront routing, session-cookie forwarding, `Origin` forwarding, authorizer-result caching, and checkout response caching. Cross-origin deployments will verify credentialed CORS and unauthenticated preflight behavior.
 
@@ -98,3 +100,5 @@ Increment 4 and 5 unit tests do not prove atomic Valkey behavior, SQS delivery, 
 - Added the active-customer key check to guarded cancellation release.
 - Added SQS worker, strict event, durable order upsert, and acknowledgement unit tests. AWS and MongoDB integration checks remain pending.
 - Added Mongoose timestamp and worker polling failure checks. AWS and MongoDB integration checks remain pending.
+- Added mock outcome, owner check, expiry, polling client wrapper, and static payment page checks. Browser and service integration checks remain pending.
+- Added payment-session redirect and post-SQS checkout tests. Browser and service integration checks remain pending.
