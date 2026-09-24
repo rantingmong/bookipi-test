@@ -6,7 +6,7 @@ This repository contains the bootstrap and shared contracts for a high-throughpu
 
 The source requirements define one configurable sale, one product, limited stock, one item per user, purchase status, purchase results, a React frontend, high throughput, resilience, no overselling, unit and integration tests, stress tests, a system diagram, and implementation documentation.
 
-Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. Increment 2 adds authentication and durable listing and order models. Increment 3 adds verified Valkey listing publication, an atomic checkout slot claim method, and a guarded cancellation release method.
+Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. Increment 2 adds authentication and durable listing and order models. Increment 3 adds verified Valkey listing publication, atomic inventory methods, and guarded cancellation release. Increment 4 adds the checkout Lambda REST handler and SQS reservation event publication.
 
 ## Flow
 
@@ -48,7 +48,7 @@ The package map is:
 
 - `packages/backend`: Express API, Better Auth email/password, listing and slot models, order model, listing publication, and deterministic demo seed; sale reads, SQS worker, and order transitions remain planned.
 - `packages/storefront`: Next.js browser experience.
-- `packages/checkout-processor`: AWS Lambda order creation, hot-path reservation, and SQS publication.
+- `packages/checkout-processor`: AWS Lambda request handling, hot-path reservation, and SQS publication.
 - `packages/checkout-authorizer`: API Gateway REST REQUEST authorization, planned for a later increment.
 - `docs`: master flow, design facets, test strategy, and implementation roadmap.
 
@@ -92,7 +92,7 @@ Read the design documents before runtime implementation.
 
 ## Gotchas
 
-The home page provides the API health check. Sign-up and login pages provide the current account flow. Listing and checkout routes, payment, and local service setup remain planned.
+The home page provides the API health check. Sign-up and login pages provide the current account flow. The checkout processor handles REST proxy requests, claims inventory in Valkey, and publishes `order-reserved.v1` to SQS. The storefront checkout flow, payment, SQS consumer, local service setup, and deployment remain planned.
 
 The planned local URLs are not available.
 
@@ -171,3 +171,7 @@ The backend uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its
 - Added increment 1 package tooling, OpenAPI generation, API bootstrap, and static storefront export.
 - Recorded possible future reliability mitigations without changing the selected runtime design.
 - Implemented the Better Auth email/password slice of Increment 2 with MongoDB accounts and Valkey sessions. Listing setup remains pending.
+
+### 2026-09-24
+
+- Added the checkout Lambda handler, tuple-scoped Valkey reservation, and SQS publication for increment 4.

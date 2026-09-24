@@ -50,6 +50,8 @@ The checkout Lambda reads the published sale state in Valkey. It uses one atomic
 
 The logical idempotency key is `(listingId, trusted customerId, client idempotencyKey)`. The customer ID comes from the API Gateway authorizer. A client key from another customer or listing resolves to a separate checkout attempt.
 
+Listing IDs use 1 to 128 ASCII letters, digits, underscores, or hyphens. The first character is a letter or digit. This contract keeps the listing ID inside its Valkey `{listingId}` hash tag.
+
 MongoDB records listing and slot facts. Valkey is the live inventory authority during the sale. SQS carries `orderId`, `customerId`, `listingId`, and `slotId` to MongoDB. The worker persists the order before the mock payment page acts on `orderId`.
 
 ## Decisions & assumptions
@@ -62,16 +64,20 @@ MongoDB records listing and slot facts. Valkey is the live inventory authority d
   | ------------------------------------------ | ---- | ----------------------------------------------------------------- |
   | `sale:{listingId}:meta`                    | hash | Sale window, publication state, seed version, and `reserveSlots`. |
   | `sale:{listingId}:available-slots`         | list | Available slot identifiers.                                       |
-  | `sale:{listingId}:user-claims`             | hash | Customer ID to `orderId` mapping.                                 |
-  | `sale:{listingId}:idempotency`             | hash | Customer and client key to stable order data.                     |
-  | `sale:{listingId}:order:{orderId}`         | hash | Order, customer, slot, and status data.                           |
-  | `sale:{listingId}:order:{orderId}:release` | hash | Guarded release marker.                                           |
+  | `sale:{listingId}:idempotency`             | hash | Encoded customer and client key fields map to `orderId`.          |
+  | `sale:{listingId}:active-customers`        | hash | Encoded customer fields map to the active `orderId`.              |
+  | `sale:{listingId}:orders`                  | hash | Order facts stored in fields named `{orderId}:<fact>`.            |
+  | `sale:{listingId}:order:{orderId}:release` | hash | Explicit guarded release marker.                                  |
+
+The claim script passes the five listing keys through `KEYS`. It stores tuple and order values in hash fields. It does not create Redis key names inside Lua. The release script also passes its release marker through `KEYS`.
 
 - MongoDB `listing-slots` has a unique `{ listingId: 1, slotId: 1 }` index and a `{ listingId: 1, state: 1 }` lookup index.
-- A completed order retains the customer claim. A cancellation releases that claim only when it still points to the old `orderId`.
+- A completed order retains its field in `active-customers`. A cancellation clears that field only when it still points to the old `orderId`.
 - A cancellation returns one slot to the same pool only after the guarded release matches the old `orderId`.
 - The number of completed orders cannot exceed the number of slot documents.
-- Every idempotency lookup uses the listing and trusted customer identity as well as the client key.
+- Every idempotency lookup uses the tuple field built from the listing, trusted customer identity, and client key.
+- URI encoding keeps customer IDs and client keys from changing the listing hash tag.
+- Listing IDs use the same restricted contract in Express and checkout.
 - The MongoDB slot record uses `orderId` as its owner after the SQS worker persists the order.
 - A future DynamoDB design must make DynamoDB the atomic slot-claim owner. DynamoDB Streams can then feed EventBridge Pipes, which sends events to SQS. This design does not use DynamoDB or Pipes.
 
@@ -90,6 +96,8 @@ After full Valkey state loss, MongoDB may not prove which slots were popped befo
 ### 2026-09-24
 
 - Added verified Valkey publication, the processor slot claim, and guarded listing release methods.
+- Defined safe listing IDs and the active-customer and per-tuple idempotency keys.
+- Mapped tuple, customer, and order state to listing-scoped Valkey hashes.
 
 ### 2026-09-23
 

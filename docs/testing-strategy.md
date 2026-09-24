@@ -14,7 +14,7 @@ The listing and order model tests use injected models and connections. They do n
 
 Current tests cover:
 
-- Listing input validation, positive integer initial slot count, reserve bounds, sale-window order, and rejection of stored stock fields.
+- Listing input validation, safe Valkey hash-tag IDs, positive integer initial slot count, reserve bounds, sale-window order, and rejection of stored stock fields.
 - Public count examples: 15 slots with 5 reserved gives 10; 10 slots with 2 reserved gives 8.
 - Transactional listing creation and exactly one deterministic slot per initial slot.
 - Total and public counts derived from `listing-slots` documents.
@@ -25,6 +25,9 @@ Current tests cover:
 - Demo seed uses listing creation and publishes ten Valkey slots.
 - Valkey seed and publication calls, post-transaction order, claim script boundaries, and guarded release calls.
 - Better Auth configuration, session storage, identity mapping, Express request order, CORS, and storefront auth calls.
+- Checkout request validation, authorizer identity handling, stable REST error responses, same-key republishing, retryable SQS failures, and the exact `order-reserved.v1` message shape.
+- Checkout processor environment validation and lazy runtime client creation.
+- Atomic inventory claim script boundaries, tuple-scoped key selection, sale window outcomes, active-order rejection, and cancellation outcomes.
 
 These tests do not prove MongoDB or Valkey integration.
 
@@ -79,9 +82,16 @@ The current seed creates one listing with `reserveSlots: 2` and ten available sl
 
 This increment has no measured load values. Later increments will define service targets after the local baseline and deployment shape are known.
 
+Increment 4 unit tests do not prove atomic Valkey behavior or SQS delivery. LocalStack, Valkey concurrency, Lambda deployment, and API Gateway proxy checks remain pending. No deployment or LocalStack proof exists.
+
 ## Change log
 
 ### 2026-09-23
 
 - Added tests for the minimal order schema and active ownership indexes.
 - Added derived listing counts, initial slot creation, transactional slot growth, and listing-only seed checks.
+
+### 2026-09-24
+
+- Added checkout handler, scoped inventory claim, and SQS event unit tests.
+- Added the active-customer key check to guarded cancellation release.

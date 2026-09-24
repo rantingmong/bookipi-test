@@ -19,6 +19,22 @@ const validListing = {
 }
 
 describe('listing feature', () => {
+  it('accepts only listing IDs that are safe Valkey hash tags', async () => {
+    for (const listingId of ['flash-sale-2026', 'Flash_Sale_26', 'sale9']) {
+      expect(
+        listingInputSchema.parse({ ...validListing, listingId }).listingId,
+      ).toBe(listingId)
+    }
+    for (const listingId of ['sale:{other}', 'sale.one', 'a'.repeat(129)]) {
+      expect(() =>
+        listingInputSchema.parse({ ...validListing, listingId }),
+      ).toThrow()
+      await expect(
+        addListingSlots({ listingId, additionalSlots: 1 }, {} as never),
+      ).rejects.toThrow()
+    }
+  })
+
   it('validates initial slot counts and reserve bounds', () => {
     expect(listingInputSchema.parse(validListing).initialSlotCount).toBe(15)
     expect(() =>
@@ -331,14 +347,70 @@ describe('listing feature', () => {
     await expect(
       releaseCancelledSlot({ eval: evalScript } as never, {
         listingId: 'sale-1',
+        customerId: 'customer-1',
         orderId: 'order-1',
         slotId: 'slot-1',
         orderStatus: 'CANCELLED',
       }),
     ).resolves.toBe(true)
     const script = evalScript.mock.calls[0]?.[0]
-    expect(script).toContain("redis.call('HGET', KEYS[3], 'orderId')")
+    expect(script).toContain("local orderPrefix = orderId .. ':'")
+    expect(script).toContain(
+      "redis.call('HGET', KEYS[3], orderPrefix .. 'orderId')",
+    )
+    expect(script).toContain(
+      "redis.call('HGET', KEYS[3], orderPrefix .. 'customerId')",
+    )
+    expect(script).toContain("redis.call('HGET', KEYS[5], activeCustomerField)")
     expect(script).toContain("redis.call('EXISTS', KEYS[4])")
-    expect(script).toContain("redis.call('RPUSH', KEYS[2], ARGV[3])")
+    expect(script).toContain("redis.call('HDEL', KEYS[5], activeCustomerField)")
+    expect(script).toContain("redis.call('RPUSH', KEYS[2], slotId)")
+    expect(evalScript.mock.calls[0]?.[1]).toBe(5)
+    expect(evalScript.mock.calls[0]?.slice(2, 7)).toEqual([
+      'sale:{sale-1}:meta',
+      'sale:{sale-1}:available-slots',
+      'sale:{sale-1}:orders',
+      'sale:{sale-1}:order:order-1:release',
+      'sale:{sale-1}:active-customers',
+    ])
+    expect(evalScript.mock.calls[0]?.slice(7)).toEqual([
+      'order-1',
+      'sale-1',
+      'customer-1',
+      'customer-1',
+      'slot-1',
+      'CANCELLED',
+    ])
+  })
+
+  it('uses the encoded active-customer field and raw customer identity', async () => {
+    const evalScript = vi.fn(async (..._args: unknown[]) => 1)
+
+    await expect(
+      releaseCancelledSlot({ eval: evalScript } as never, {
+        listingId: 'sale-1',
+        customerId: 'customer:a',
+        orderId: 'order-1',
+        slotId: 'sale-1:slot:0001',
+        orderStatus: 'CANCELLED',
+      }),
+    ).resolves.toBe(true)
+
+    const call = evalScript.mock.calls[0]
+    const script = String(call?.[0])
+    expect(call?.[1]).toBe(5)
+    expect(call?.slice(7)).toEqual([
+      'order-1',
+      'sale-1',
+      'customer:a',
+      'customer%3Aa',
+      'sale-1:slot:0001',
+      'CANCELLED',
+    ])
+    expect(script).toContain('local rawCustomerId = ARGV[3]')
+    expect(script).toContain("orderPrefix .. 'customerId') ~= rawCustomerId")
+    expect(script).toContain('local activeCustomerField = ARGV[4]')
+    expect(script).toContain("redis.call('HGET', KEYS[5], activeCustomerField)")
+    expect(script).toContain("redis.call('HDEL', KEYS[5], activeCustomerField)")
   })
 })
