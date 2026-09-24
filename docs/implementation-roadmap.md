@@ -16,7 +16,11 @@ Update the affected README and design document when a decision changes.
 
 ## Decisions & assumptions
 
-- Increment 0 records the system design. Increment 1 is complete. The authentication and durable listing/order model foundation slices of Increment 2 are complete. Listing publication and sale routes remain pending.
+- Increment 0 records the system design.
+- Increment 1 is complete.
+- Increment 2 implementation and focused verification are complete. Integration evidence remains pending.
+- Increment 3 implements listing publication and inventory methods. Sale routes remain planned.
+- Increment 4 implementation, local verification, and internal reviews are complete. Integration and deployment evidence remain pending.
 - The selected stack remains pnpm, TypeScript, Express, Next.js static export, CloudFront, API Gateway, Lambda, MongoDB, Valkey, and LocalStack.
 - API Gateway REST API uses `packages/checkout-authorizer` for its separate REQUEST Lambda authorizer. It checks Better Auth sessions in Valkey.
 - Each future feature needs a user review before implementation if its angles change behavior or system boundaries.
@@ -54,7 +58,7 @@ Verification: package metadata validation, API generation, TypeScript checks, co
 
 ## Increment 2: Better Auth and listing setup
 
-Status: authentication and durable listing/order model foundation complete; listing publication remains pending.
+Status: implementation and focused verification complete; integration evidence remains pending.
 
 Angle A: keep Better Auth, listing creation, and seed orchestration in Express. Store Better Auth users and credentials in MongoDB, and sessions in Valkey secondary storage.
 
@@ -88,7 +92,7 @@ This increment also adds the first checkout-processor feature: an atomic slot po
 
 ## Increment 4: checkout request and SQS publication
 
-Status: implementation complete; verification and review evidence are pending.
+Status: implementation, local verification, and internal reviews complete; integration and deployment evidence remain pending.
 
 Angle A: Lambda owns atomic Valkey reservation and SQS publication.
 
@@ -199,3 +203,4 @@ Open choice: select the live storefront wording for the case where public remain
 ### 2026-09-24
 
 - Implemented increment 4 request handling, scoped Valkey reservation, and SQS publication. Integration and deployment evidence remain pending.
+- Corrected the Increment 2 and Increment 4 status summaries after local verification and review.
