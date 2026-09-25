@@ -57,15 +57,19 @@ Valkey integration tests will cover atomic slot claims and map the client-genera
 
 ## Browser tests with Playwright
 
-The controlled Playwright tests verify session display, public listing display, direct checkout request fields, credentialed cookie forwarding, sign-in guidance after an explicit unauthenticated response, expired-session revalidation after a readable API Gateway denial, active-session retry after a readable denial, same-key reuse, and navigation to the payment result. They use controlled route responses. The full integration suite verifies real local sign-in and session authorization through LocalStack. Neither suite proves deployed CloudFront behavior.
+The controlled Playwright tests verify session display, public listing counts, authenticated current-order state, order links, cancellation repurchase, home sign-out and order-data clearing, direct checkout request fields, credentialed cookie forwarding, checkout retry, and navigation after both mock outcomes. They also verify the read-only order status page. They use controlled route responses. The full integration suite verifies real local sign-in and session authorization through LocalStack. Neither suite proves deployed CloudFront behavior.
 
-The `/payment?orderId=...` page polls until the SQS worker persists the order. It shows outcome controls only after the authenticated API confirms ownership. Browser tests will verify pending, owner-not-found, request error, success, and cancellation states. Provider callback correlation remains planned work.
+The `/payment?orderId=...` page polls until the SQS worker persists the order. It shows outcome controls only after the authenticated API confirms ownership. Controlled browser tests cover both outcome redirects, the read-only status page, and no redirect after an outcome error. Provider callback correlation remains planned work.
 
 Deployment checks must verify CloudFront routing, session-cookie forwarding, `Origin` forwarding, REQUEST-authorizer invocation, disabled authorizer-result caching, and disabled checkout response caching. Cross-origin deployments must verify credentialed CORS on success and relevant errors, an unauthenticated `OPTIONS` response, and an authorizer-denial API Gateway `GatewayResponse` with the exact allowed Origin and `Access-Control-Allow-Credentials: true`. Local Caddy and LocalStack do not prove these settings. This repository has no deployed AWS configuration or proof.
 
 ## Stress tests with k6
 
-k6 will test concurrent claims, repeated idempotency tuples, requests around the sale window, SQS delays, and short Valkey or MongoDB failures. Each report will state its load profile and environment before its results.
+The k6 script measures authenticated checkout requests with preloaded Better Auth sessions. The local setup command creates unique test users and actual session cookies through Better Auth. It does not expose a protected HTTP setup route. The three-run runner uses 10, 20, and 40 VUs with 10 iterations per VU. It preloads 100, 200, and 400 sessions and lists with 20, 40, and 80 available units. It expects 20, 40, and 80 accepted attempts, plus 80, 160, and 320 sold-out attempts. It then completes accepted orders through the owner API and checks the durable MongoDB order and secured-slot bindings. It records counts for HTTP 202, HTTP 409, status 0, and other responses. It saves sanitized k6 output on failure. See the [k6 checkout guide](../load-tests/README.md) for setup and run commands.
+
+Use one session for each checkout attempt. The `per-vu-iterations` scenario selects sessions by `exec.scenario.iterationInTest`, so the preloaded session count must cover VUs multiplied by iterations per VU. The runner checks the actual k6 `iterations.count` against that product. The script classifies HTTP 202 as accepted and HTTP 409 `SOLD_OUT` as expected. Other conflicts and responses fail the check. It does not follow the payment redirect or submit payment outcomes. Resetting Valkey invalidates all preloaded sessions.
+
+Each report states the endpoint, listing, iterations per VU, total iterations, virtual-user count, environment, outcome metrics, completed order count, secured slot count, slot ownership checks, and cleanup result. The runner stores JSON and HTML reports under `.artifacts/k6-runs/` before each test stack is removed. Payment outcomes run after k6 and do not affect the measured interval. The stress test does not test SQS delays or service failures. A local test does not prove deployed Lambda, API Gateway, or CloudFront behavior.
 
 ## Invariants and acceptance criteria
 
@@ -78,6 +82,8 @@ k6 will test concurrent claims, repeated idempotency tuples, requests around the
 | Order identity            | Every order has one unique `orderId`, which also identifies the slot owner.                                                              |
 | Idempotency               | Valkey keeps the exact client key mapping. A retry reuses `orderId` and `slotId`; a different customer, listing, or key cannot reuse it. |
 | Active customer ownership | At most one `PENDING` or `COMPLETE` order exists for a listing and customer.                                                             |
+| Customer order lookup     | The authenticated listing lookup returns only the current customer's `PENDING` or `COMPLETE` order.                                      |
+| Displayed sale counts     | `boughtUnits` counts `COMPLETE`; `remainingUnits` subtracts `PENDING` and `COMPLETE` from initial `publicStock`, bounded at zero.        |
 | Active slot ownership     | At most one `PENDING` or `COMPLETE` order exists for a listing and slot.                                                                 |
 | Cancellation              | A `CANCELLED` order does not block a later checkout for the same listing and customer.                                                   |
 | Cancellation release      | A failure or expiry stores the release intent with cancellation. A matching Valkey marker can be retried without adding the slot twice.  |
@@ -90,7 +96,7 @@ k6 will test concurrent claims, repeated idempotency tuples, requests around the
 
 The default seed creates one listing with `reserveSlots: 2` and ten available slot documents. Reads derive 10 total slots and 8 public slots. The seed publishes Valkey inventory and does not create orders. A repeat run with identical facts and state succeeds idempotently. Conflicting facts or inconsistent existing state fail closed. The integration suite uses a unique listing ID and active sale window for each run.
 
-This increment has no measured load values. Later increments will define service targets after the local baseline and deployment shape are known.
+The benchmark harness defines three local load profiles. The run must record actual values before anyone reports a performance result. Later increments will define service targets after the local baseline and deployment shape are known.
 
 Unit tests do not prove atomic Valkey behavior or MongoDB transaction behavior. The local integration suite verifies the end-to-end reservation and payment path with a MongoDB replica set, Valkey, LocalStack API Gateway, Lambda, and SQS. Valkey concurrency, stress behavior, deployed Lambda, deployed API Gateway, and CloudFront remain unverified.
 
@@ -117,3 +123,4 @@ Unit tests do not prove atomic Valkey behavior or MongoDB transaction behavior. 
 
 - Added the full-stack LocalStack integration suite through the same-origin local Caddy edge. Deployed CloudFront and AWS behavior remain unverified.
 - Added a controlled Playwright checkout retry test. Deployment integration remains pending.
+- Added a k6 checkout test that uses preloaded Better Auth sessions and records checkout outcomes.

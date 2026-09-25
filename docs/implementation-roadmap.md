@@ -171,7 +171,7 @@ Deployment verification remains required. Check CloudFront routing, cookie and O
 
 ## Increment 9: stress and resilience evidence
 
-Status: awaiting review.
+Status: checkout load-test setup and three-run report harness implemented. No k6 load result exists yet.
 
 Angle A: run k6 against the local service set first, then repeat against the selected deployment shape.
 
@@ -181,7 +181,9 @@ Selection recorded by this design: Angle A.
 
 Reason: local repeatability exposes invariant failures before deployment cost.
 
-Planned verification: throughput, latency percentiles, error rate, failure injection, recovery time, event-order permutations, release replay, and every invariant in `docs/testing-strategy.md`.
+The local runner creates separate stacks for 10, 20, and 40 VUs. Each VU performs 10 iterations, which gives 100, 200, and 400 preloaded Better Auth sessions. The listings have 20, 40, and 80 available units. The expected outcomes are 20, 40, and 80 accepted orders, plus 80, 160, and 320 sold-out responses. After each measured run, it completes accepted orders through the owner API and verifies exact iteration counts, order counts, and secured slot ownership in MongoDB. It saves JSON and HTML reports before it removes that run's project volumes. The harness does not count as load evidence. Run it and review the reports before anyone reports throughput, latency percentiles, error rate, or checkout outcomes.
+
+Further verification remains planned for failure injection, recovery time, event-order permutations, release replay, and every invariant in `docs/testing-strategy.md`.
 
 Open choice: select the live storefront wording for the case where public remaining reaches zero while the Valkey pool still has claimable slots. Checkout uses the Valkey pool as the sold-out authority.
 

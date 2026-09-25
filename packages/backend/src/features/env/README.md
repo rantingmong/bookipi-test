@@ -22,7 +22,7 @@ Backend startup also requires `AWS_REGION` and `SQS_QUEUE_URL`. The server start
 
 Set optional `SQS_ENDPOINT_URL` to use LocalStack. The local stack points it to `http://localstack:4566`.
 
-The seed accepts optional `DEMO_LISTING_ID`, `DEMO_SALE_STARTS_AT`, and `DEMO_SALE_ENDS_AT` values. The integration suite sets a unique ID and active sale window for each run.
+The seed accepts optional `DEMO_LISTING_ID`, `DEMO_SALE_STARTS_AT`, `DEMO_SALE_ENDS_AT`, `DEMO_INITIAL_SLOT_COUNT`, and `DEMO_RESERVE_SLOTS` values. The slot count must be a positive integer. The reserve count must be a non-negative integer. The defaults are ten slots and two reserves.
 
 Mock payment outcomes do not require a feature flag.
 

@@ -1,6 +1,8 @@
 # Payment feature
 
-The payment feature applies an outcome to a stored order. A success changes `PENDING` to `COMPLETE`. A failure or expiry changes `PENDING` to `CANCELLED` and sets `releaseStatus` to `PENDING` in the same document update. The request handler then reconciles the pending release before it returns a response.
+The payment feature applies an outcome to a stored order. A MongoDB transaction changes `PENDING` to `COMPLETE` and changes its listing slot to `secured` with matching `orderId` and `customerId` values. A same-success retry repairs the slot link if needed. The slot update only changes an unowned `available` slot. It reports an absent or conflicting slot without changing another order's slot. A failed slot update rolls back the order update.
+
+A failure or expiry changes `PENDING` to `CANCELLED` and sets `releaseStatus` to `PENDING` in the same document update. The request handler then reconciles the pending release before it returns a response.
 
 A failed or interrupted outcome request must be retried by its caller. No background sweep repairs a pending release.
 
@@ -14,3 +16,4 @@ The feature does not call a payment provider or release inventory. The order fea
 
 - Added an atomic durable release intent to mock cancellation.
 - Reconciled pending release after the payment outcome request.
+- Secured the listing slot for a completed order and repaired the link on a same-success retry.

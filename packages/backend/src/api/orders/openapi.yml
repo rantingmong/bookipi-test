@@ -3,10 +3,13 @@ info:
   title: Orders API
   version: 1.0.0
 paths:
+  /orders/current:
+    $ref: ./get-order-for-listing/openapi.yml#/paths/~1orders~1current
   /orders/{orderId}:
     $ref: ./get-order/openapi.yml#/paths/~1orders~1{orderId}
   /orders/{orderId}/payment-outcome:
     $ref: ./post-payment-outcome/openapi.yml#/paths/~1orders~1{orderId}~1payment-outcome
 x-endpoints:
+  - ./get-order-for-listing/openapi.yml
   - ./get-order/openapi.yml
   - ./post-payment-outcome/openapi.yml

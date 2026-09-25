@@ -36,7 +36,7 @@ sequenceDiagram
 
 The listing document stores its identifier, product display name, sale window, and `reserveSlots`. It does not store a stock total. The initial slot count is an operation parameter. MongoDB derives `stockTotal` by counting listing-slot documents. The system derives `publicStock = stockTotal - reserveSlots`.
 
-The public `GET /api/listings/{listingId}` route returns the listing ID, product name, ISO sale times, `stockTotal`, `reserveSlots`, and `publicStock`. It returns `404` for an unknown listing. It does not expose slot IDs. The storefront displays `publicStock` as listing information. It does not use that value as live stock or as the sold-out rule.
+The public `GET /api/listings/{listingId}` route returns the listing ID, product name, ISO sale times, `stockTotal`, `reserveSlots`, `publicStock`, `boughtUnits`, and `remainingUnits`. It returns `404` for an unknown listing. It does not expose slot IDs. `publicStock` remains `stockTotal - reserveSlots`. `boughtUnits` counts `COMPLETE` orders. `remainingUnits` is `max(0, publicStock - PENDING orders - COMPLETE orders)`. Cancelled orders do not reduce the displayed count. These durable counts do not show the live Valkey pool or decide whether checkout is sold out.
 
 The create operation requires a positive integer `initialSlotCount` and `0 <= reserveSlots <= initialSlotCount`. Express creates the listing and its initial slots in one MongoDB transaction.
 
@@ -94,6 +94,10 @@ The guarded release method checks the exact `orderId`, listing ID, and slot ID. 
 After full Valkey state loss, MongoDB may not prove which slots were popped before SQS accepted an event. Keep checkout closed when ownership is unclear.
 
 ## Change log
+
+### 2026-09-25
+
+- Added durable bought and remaining counts while keeping `publicStock` semantics unchanged.
 
 ### 2026-09-24
 

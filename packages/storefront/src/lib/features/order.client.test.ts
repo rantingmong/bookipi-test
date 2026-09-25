@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   getOrderPollInterval,
+  readCurrentOrder,
   readOrder,
   submitMockPaymentOutcome,
 } from './order.client'
@@ -33,6 +34,24 @@ describe('order client', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.example.test/api/orders/order-001',
+      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+    )
+  })
+
+  it("reads the current customer's order for a listing with credentials", async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify(order), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await readCurrentOrder('https://api.example.test/', 'listing-001')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.test/api/orders/current?listingId=listing-001',
       expect.objectContaining({ method: 'GET', credentials: 'include' }),
     )
   })

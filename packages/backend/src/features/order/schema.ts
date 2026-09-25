@@ -12,3 +12,13 @@ export const orderInputSchema = z
   .strict()
 
 export const orderIdSchema = z.object({ orderId: z.string().min(1) }).strict()
+
+export const listingOrderQuerySchema = z
+  .object({
+    listingId: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/),
+  })
+  .strict()

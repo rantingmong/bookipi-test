@@ -21,6 +21,8 @@ Each facet uses short sequence diagrams for one business stage. Read the prose f
 
 Read [testing-strategy.md](testing-strategy.md) for test layers, invariants, and acceptance criteria.
 
+Read [local-k6-benchmark-2026-09-25.md](local-k6-benchmark-2026-09-25.md) for local checkout benchmark results and their limits.
+
 Read [implementation-roadmap.md](implementation-roadmap.md) for reviewable increments and implementation choices.
 
 Read [../infra/README.md](../infra/README.md) for the local Caddy and LocalStack test stack. It describes local checks and their limits.
@@ -38,9 +40,7 @@ Update the affected document when a decision or boundary changes.
 
 ## Gotchas
 
-No document proves that a runtime exists.
-
-No document contains benchmark results for this design-only increment.
+The local benchmark does not prove deployed AWS, CloudFront, or production behavior.
 
 Mermaid diagrams describe the plan and require validation when the related runtime work starts.
 
@@ -63,3 +63,7 @@ The deployed purchase path is CloudFront to an API Gateway REST API to the check
 - Split facet sequence diagrams by business stage and removed preflight exchanges.
 - Named the cancellation flow slot reallocation after order cancellation without changing release marker names.
 - Linked the reliability facet's current and future mitigation notes.
+
+### 2026-09-25
+
+- Added local k6 checkout benchmark results and their limits.

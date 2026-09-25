@@ -16,8 +16,11 @@ export default function Content() {
       <main
         className="group"
         data-listing={state.listingState}
+        data-sale-window={state.saleWindowState}
         data-session={state.sessionState}
         data-purchase={state.purchaseState}
+        data-customer-order={state.customerOrderState}
+        data-sign-out={state.signOutState}
         data-checkout-configured={String(state.checkoutConfigured)}
       >
         <HeaderPart />

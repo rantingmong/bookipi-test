@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The storefront provides public sale status, direct checkout, Better Auth sign-up and login pages, and the mock payment page.
+The storefront provides public sale status, direct checkout, Better Auth sign-up, login, and sign-out, a mock payment page, and an order status page.
 
 ## Runtime
 
@@ -12,11 +12,17 @@ The `/sign-up` page registers the name, email, and password fields with React Ho
 
 The auth pages keep feedback and session elements in the document. Tailwind CSS group data attributes control their visibility. Auth feedback reports the completed request. The session panel shows the current session. The Tailwind setup omits Preflight to preserve browser default styles. A session refresh error appears separately from auth feedback.
 
-The `/payment?orderId=...` page reads the order with the generated client wrapper and includes browser credentials. It polls while the SQS worker has not stored the order. It shows success and failure controls only after the API confirms the signed-in owner. It shows the final `COMPLETE` or `CANCELLED` status after the API returns it.
+The home page reads the authenticated customer's order for the current listing. It shows the order ID and status, links a pending order to `/payment?orderId=...`, and links a completed order to `/order-status?orderId=...`. It disables purchase when an active or completed order is known. Home sign-out uses Better Auth, refreshes the session, and clears the customer-order response.
+
+The home page shows `Units available` from `remainingUnits` and `Units bought` from `boughtUnits`. It hides total and reserved counts. The durable remaining count does not show the live Valkey pool.
+
+The home page shows whether the sale is upcoming, open, or ended. It updates this state every second from the listing's sale window and disables checkout outside the open window. The checkout service remains the final authority.
+
+The `/payment?orderId=...` page reads the order with the generated client wrapper and includes browser credentials. It polls while the SQS worker has not stored the order. It shows success and failure controls only after the API confirms the signed-in owner. It navigates to `/order-status?orderId=...` only after the outcome request succeeds. The `/order-status` page reads the order again and shows its current `PENDING`, `COMPLETE`, or `CANCELLED` status to the owner.
 
 Run `pnpm generate:api` from the repository root to update the ignored browser client. Keep tracked feature wrappers under `src/lib/features`.
 
-Run `pnpm --filter @bookipi/storefront test:e2e` for controlled Playwright checkout tests. They check request fields, cookie forwarding, explicit unauthenticated responses, opaque-failure session revalidation, active-session retry, idempotency-key reuse, and payment navigation. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to use an installed Chromium-based browser. The full local integration suite uses Caddy as one same-origin edge. Neither test proves deployed CloudFront or authorizer behavior.
+Run `pnpm --filter @bookipi/storefront test:e2e` for controlled Playwright tests. They check checkout requests, payment outcomes and status navigation, customer order state, home sign-out, and displayed listing counts. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to use an installed Chromium-based browser. The full local integration suite uses Caddy as one same-origin edge. Neither test proves deployed CloudFront or authorizer behavior.
 
 Keep page UI in `src/app/<page>/page.tsx` and its state hook in `page.state.tsx`. Put page-specific components in `parts`, shared hooks in `src/hooks`, generated client code in `src/lib/api/generated`, tracked client wrappers and shared feature state in `src/lib/features`, and shared UI components in `src/ui`. Create these directories when their first file is needed.
 
@@ -34,9 +40,11 @@ In deployment, CloudFront routes the request through API Gateway to the checkout
 
 The storefront shows accepted, retryable, unauthenticated, sold-out, and completed purchase states. It shows sign-in guidance for an explicit unauthenticated response. After an opaque checkout failure or a readable `403` without a checkout error code, it revalidates the Better Auth session. An absent session shows sign-in guidance. An active session keeps the request retryable. Explicit checkout errors do not trigger session revalidation. A retry reuses the same idempotency key.
 
-The listing advertises the slot-document count minus `reserveSlots`. Checkout reports sold out only when Valkey has no claimable slot.
+The listing keeps `publicStock` as the slot-document count minus `reserveSlots`. `remainingUnits` subtracts durable pending and complete orders from that count. Checkout reports sold out only when Valkey has no claimable slot.
 
-The `/payment?orderId=...` page shows a pending state until the Express SQS worker stores the MongoDB order. It uses `orderId` and shows success and failure buttons only after Express checks the authenticated owner.
+The `/payment?orderId=...` page shows a pending state until the Express SQS worker stores the MongoDB order. It uses `orderId` and shows success and failure buttons only after Express checks the authenticated owner. A successful outcome request opens `/order-status?orderId=...`, which reads the order by its ID.
+
+The home page uses the authenticated current-order route to show an order ID and status for the selected listing. The route returns only pending or complete orders. A pending order links to the mock payment page. A completed order links to the order status page.
 
 The mock page calls the owner-checked outcome route after the order exists.
 
@@ -48,6 +56,7 @@ The page requires the authenticated order owner. The payment outcome route is av
 
 - The storefront uses Next.js.
 - The storefront does not reserve inventory directly.
+- The home page clears its customer-order response after sign-out and refreshes the Better Auth session.
 - The listing's displayed total comes from slot documents. The storefront does not treat that count as the sold-out authority.
 - The storefront does not write MongoDB or Valkey.
 - The browser does not send its purchase request to Express.
@@ -66,6 +75,8 @@ Do not use React Router for this package.
 Do not treat a client response as durable order proof until the backend reports the persisted result.
 
 The browser cannot self-assert payment success in a real deployment.
+
+The displayed `remainingUnits` and `boughtUnits` come from MongoDB order documents. They do not prove the current number of slots in Valkey.
 
 For cross-origin deployments, API Gateway must return the exact allowed `Origin` and `Access-Control-Allow-Credentials: true` in a `GatewayResponse` for authorizer denials. Local tests use one origin. They do not prove deployed CloudFront or API Gateway behavior.
 
@@ -102,3 +113,8 @@ For cross-origin deployments, API Gateway must return the exact allowed `Origin`
 - Moved payment order state under `src/lib/features` and page content under `src/app/payment/parts`.
 - Added the public listing client, direct credentialed checkout request, retry key reuse, and home-page purchase states.
 - Added a controlled Playwright checkout retry test. It does not test deployed CloudFront or authorizer behavior.
+
+### 2026-09-25
+
+- Added current-listing order state, home sign-out, available and bought unit display, and the shared order status page.
+- Added live sale-window status and disabled checkout before the sale starts and after it ends.

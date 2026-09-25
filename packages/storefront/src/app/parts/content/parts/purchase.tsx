@@ -19,8 +19,10 @@ export function PurchasePart() {
         disabled={
           !state.session.data ||
           state.purchasePending ||
+          !state.canPurchaseForCustomerOrder ||
           !state.checkoutConfigured ||
-          state.listingState !== 'ready'
+          state.listingState !== 'ready' ||
+          state.saleWindowState !== 'open'
         }
       >
         <span className="hidden group-data-[purchase=pending]:inline">

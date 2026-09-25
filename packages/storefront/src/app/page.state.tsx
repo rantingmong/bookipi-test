@@ -1,21 +1,24 @@
 'use client'
 
-import { useRef } from 'react'
-import useSWR from 'swr'
-import useSWRMutation from 'swr/mutation'
-import { useRouter } from 'next/navigation'
 import {
   authClient,
   revalidateCurrentSession,
+  signOut,
 } from '@/lib/features/auth.client'
+import { classifyCheckoutFailure } from '@/lib/features/checkout-failure'
 import {
   CheckoutRequestError,
   submitCheckout,
 } from '@/lib/features/checkout.client'
 import { readListingStatus } from '@/lib/features/listing.client'
-import { classifyCheckoutFailure } from '@/lib/features/checkout-failure'
+import { readCurrentOrder } from '@/lib/features/order.client'
+import { useRouter } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
+import useSWR from 'swr'
+import useSWRMutation from 'swr/mutation'
 
 export function usePageState() {
+  const [clockNow, setClockNow] = useState<number | null>(null)
   const router = useRouter()
   const session = authClient.useSession()
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
@@ -30,6 +33,43 @@ export function usePageState() {
     listingKey,
     () => readListingStatus(apiBaseUrl as string, listingId as string),
     { revalidateOnFocus: false },
+  )
+  useEffect(() => {
+    setClockNow(Date.now())
+    const clockInterval = window.setInterval(() => {
+      setClockNow(Date.now())
+    }, 1000)
+    return () => window.clearInterval(clockInterval)
+  }, [])
+  const customerId = session.data?.user.id
+  let customerOrderKey: string[] | null = null
+  if (apiBaseUrl && listingId && customerId) {
+    customerOrderKey = ['listing-order', apiBaseUrl, listingId, customerId]
+  }
+  const customerOrder = useSWR(
+    customerOrderKey,
+    () => readCurrentOrder(apiBaseUrl as string, listingId as string),
+    { revalidateOnFocus: false },
+  )
+
+  const signOutMutation = useSWRMutation(
+    'home-auth-sign-out',
+    async () => {
+      let result
+      try {
+        result = await signOut()
+      } catch {
+        throw new Error('The sign-out request failed.')
+      }
+      if (result.error) {
+        if (result.error.message) throw new Error(result.error.message)
+        throw new Error('The sign-out request failed.')
+      }
+      await customerOrder.mutate(undefined, { revalidate: false })
+      await session.refetch()
+      return true
+    },
+    { throwOnError: false },
   )
   const checkout = useSWRMutation(
     'checkout',
@@ -86,6 +126,37 @@ export function usePageState() {
     if (listing.error) return 'The sale status request failed.'
     return ''
   })()
+  const saleWindowState = (() => {
+    if (!listing.data || clockNow === null) return 'checking'
+    const saleStartsAt = Date.parse(listing.data.saleStartsAt)
+    const saleEndsAt = Date.parse(listing.data.saleEndsAt)
+    if (!Number.isFinite(saleStartsAt) || !Number.isFinite(saleEndsAt)) {
+      return 'checking'
+    }
+    if (clockNow < saleStartsAt) return 'upcoming'
+    if (clockNow >= saleEndsAt) return 'ended'
+    return 'open'
+  })()
+  const signOutError = (() => {
+    if (signOutMutation.error) return signOutMutation.error.message
+    return ''
+  })()
+  const signOutState = (() => {
+    if (signOutMutation.isMutating) return 'pending'
+    return 'idle'
+  })()
+  const customerOrderState = (() => {
+    let state = 'none'
+    if (customerId && customerOrderKey && customerOrder.isLoading) {
+      state = 'loading'
+    }
+    if (customerOrder.data) state = 'ordered'
+    if (customerOrder.error) state = 'error'
+    return state
+  })()
+  const canPurchaseForCustomerOrder = Boolean(
+    customerOrderKey && !customerOrder.data && !checkout.data,
+  )
 
   const purchaseState = (() => {
     let state = 'idle'
@@ -147,7 +218,14 @@ export function usePageState() {
   })()
 
   async function purchase() {
-    if (!session.data || !listingId || !checkoutUrl || checkout.isMutating)
+    if (
+      !session.data ||
+      !listingId ||
+      !checkoutUrl ||
+      checkout.isMutating ||
+      saleWindowState !== 'open' ||
+      !canPurchaseForCustomerOrder
+    )
       return
     if (!attemptKey.current) attemptKey.current = crypto.randomUUID()
     try {
@@ -156,11 +234,27 @@ export function usePageState() {
         checkoutUrl,
         idempotencyKey: attemptKey.current,
       })
-      if (result) router.push(result.redirectUrl)
+      if (result) {
+        router.push(result.redirectUrl)
+      }
     } catch {
       // SWR exposes the request error in the page state.
     }
   }
+
+  async function leaveSession() {
+    await signOutMutation.trigger()
+  }
+
+  const customerOrderLink = (() => {
+    if (customerOrder.data) {
+      if (customerOrder.data.status === 'PENDING') {
+        return `/payment?orderId=${encodeURIComponent(customerOrder.data.orderId)}`
+      }
+      return `/order-status?orderId=${encodeURIComponent(customerOrder.data.orderId)}`
+    }
+    return '/'
+  })()
 
   const paymentRedirect = (() => {
     if (checkout.data) return checkout.data.redirectUrl
@@ -172,8 +266,17 @@ export function usePageState() {
     listing: listing.data,
     listingState,
     listingErrorMessage,
+    saleWindowState,
     session,
     sessionState,
+    customerOrder: customerOrder.data,
+    customerOrderLink,
+    customerOrderState,
+    canPurchaseForCustomerOrder,
+    leaveSession,
+    signOutPending: signOutMutation.isMutating,
+    signOutState,
+    signOutError,
     checkoutConfigured: Boolean(checkoutUrl),
     purchase,
     purchasePending: checkout.isMutating,

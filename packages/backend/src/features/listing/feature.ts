@@ -143,12 +143,21 @@ export async function getListingStatus(listingId: string, models: Models) {
   const listing = await models.ListingModel.findOne({ listingId })
   if (!listing) return null
   const counts = await getListingCounts(listingId, listing.reserveSlots, models)
+  const [boughtUnits, orderedUnits] = await Promise.all([
+    models.OrdersModel.countDocuments({ listingId, status: 'COMPLETE' }),
+    models.OrdersModel.countDocuments({
+      listingId,
+      status: { $in: ['PENDING', 'COMPLETE'] },
+    }),
+  ])
   return {
     listingId: listing.listingId,
     productName: listing.productName,
     saleStartsAt: listing.saleStartsAt.toISOString(),
     saleEndsAt: listing.saleEndsAt.toISOString(),
     ...counts,
+    boughtUnits,
+    remainingUnits: Math.max(0, counts.publicStock - orderedUnits),
   }
 }
 

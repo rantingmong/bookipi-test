@@ -16,6 +16,8 @@ describe('listing client', () => {
           stockTotal: 15,
           reserveSlots: 5,
           publicStock: 10,
+          boughtUnits: 3,
+          remainingUnits: 5,
         }),
         { status: 200 },
       ),

@@ -18,7 +18,7 @@ Express stores listing identity, product display name, sale window, and `reserve
 
 Express creates the listing and its initial slot documents in one MongoDB transaction. It seeds all slots in one Valkey availability list and publishes only after seed verification. Every slot in this pool is claimable. Atomic Valkey pop prevents two requests from claiming the same slot. Transactional slot growth counts the existing slot documents and inserts the next sequential IDs.
 
-The storefront reads public listing status from `GET /api/listings/{listingId}`. In deployment, the browser sends checkout to CloudFront. In the local stack, Caddy sends `/api/checkout` to the LocalStack REST API Gateway endpoint. Express never invokes Lambda or proxies the purchase request.
+The storefront reads listing status from `GET /api/listings/{listingId}` and the signed-in customer's current order from `GET /api/orders/current?listingId=...`. Listing status includes durable bought and remaining counts. It does not report the live Valkey pool. In deployment, the browser sends checkout to CloudFront. In the local stack, Caddy sends `/api/checkout` to the LocalStack REST API Gateway endpoint. Express never invokes Lambda or proxies the purchase request.
 
 The deployed REST API uses a REQUEST Lambda authorizer. It checks `Origin` first and rejects a missing or unapproved value before it calls Better Auth or reads Valkey. Deployment configuration supplies the exact storefront origin allowlist.
 
@@ -34,7 +34,7 @@ The client sends an idempotency key. Lambda validates but does not change it. Va
 
 The Express SQS worker long-polls SQS, validates each strict `order-reserved.v1` event, and upserts the durable order by `orderId`. It acknowledges a message only after MongoDB persistence succeeds. It does not overwrite conflicting facts or reopen a terminal order.
 
-The `/payment?orderId=...` page waits for MongoDB persistence, then uses an authenticated order read before it shows outcome controls. The owner can submit a mock success or failure.
+The `/payment?orderId=...` page waits for MongoDB persistence, then uses an authenticated order read before it shows outcome controls. The owner can submit a mock success or failure. After the API accepts either outcome, the page opens `/order-status?orderId=...` to read and show the order status.
 
 The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. The payment feature applies mock outcomes. Provider callback correlation and payment reconciliation remain planned. The order feature reconciles cancellation releases through the guarded Valkey method after each reservation batch item and payment outcome.
 
@@ -48,7 +48,7 @@ The [reliability facet](docs/reliability.md) records current safeguards and poss
 
 The package map is:
 
-- `packages/backend`: Express API, Better Auth email/password, public listing status, listing and slot models, order model, listing publication, deterministic demo seed, SQS reservation worker, authenticated order reads, and a payment feature.
+- `packages/backend`: Express API, Better Auth email/password, public listing status, listing and slot models, order model, listing publication, deterministic demo seed, SQS reservation worker, authenticated order reads by ID and listing, and a payment feature.
 - `packages/storefront`: Next.js browser experience.
 - `packages/checkout-processor`: AWS Lambda request handling, hot-path reservation, payment redirect creation, and SQS publication.
 - `packages/checkout-authorizer`: deployed API Gateway REST REQUEST authorization, with Better Auth session checks through Valkey.
@@ -104,6 +104,8 @@ The repository has not performed external publication.
 
 Do not report benchmark results before a stress test produces them.
 
+The k6 checkout test uses private preloaded Better Auth session cookies. Create them with the backend local setup command and keep the session file in ignored `.artifacts/k6`. A Valkey reset invalidates these sessions. Read the [k6 checkout guide](load-tests/README.md) before a test.
+
 If deployed storefront and checkout origins differ, configure credentialed CORS. Return the exact approved storefront origin in `Access-Control-Allow-Origin`, never `*`, and return `Access-Control-Allow-Credentials: true` on successful POST and relevant error responses. CloudFront must allow and forward `OPTIONS` and its preflight headers. The unauthenticated API Gateway `OPTIONS` method returns the required CORS headers. It must not use the checkout POST authorizer or invoke checkout. The local Caddy setup uses one origin and does not need a browser preflight.
 
 The storefront reads `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_LISTING_ID`, and `NEXT_PUBLIC_CHECKOUT_URL` at build time. The authorizer checks the exact `STOREFRONT_ORIGIN`. Set the same value for checkout response CORS when origins differ.
@@ -128,6 +130,7 @@ Commands in this README apply to the current runtime and planned system.
 - [Identity and access](docs/identity-and-access.md)
 - [Reliability](docs/reliability.md)
 - [Testing strategy](docs/testing-strategy.md)
+- [k6 checkout guide](load-tests/README.md)
 - [Implementation roadmap](docs/implementation-roadmap.md)
 
 ### Commands
@@ -190,3 +193,8 @@ The local edge uses port `3200`. LocalStack uses port `4566`. The backend runs o
 - Implemented the static mock payment page, authenticated order reads, post-SQS redirect creation, and local or test payment outcomes for increment 6. Browser, MongoDB, SQS, and deployment checks remain pending.
 - Added trigger-driven mock cancellation release reconciliation with guarded Valkey marker recovery. MongoDB and Valkey integration checks remain pending.
 - Implemented Increment 8 public listing status, direct storefront checkout, and the Valkey-backed REST REQUEST authorizer. Deployment checks remain pending.
+
+### 2026-09-25
+
+- Added authenticated home order status and sign-out, durable listing counts, and one order status page after mock outcomes.
+- Added a local Better Auth session preload command and a k6 checkout load test.

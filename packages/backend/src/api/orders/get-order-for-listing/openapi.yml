@@ -1,0 +1,54 @@
+openapi: 3.1.0
+info:
+  title: Read current customer order for a listing
+  version: 1.0.0
+paths:
+  /orders/current:
+    get:
+      operationId: getCurrentOrder
+      summary: Read the current customer's active order for a listing
+      parameters:
+        - name: listingId
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_-]*$'
+      responses:
+        '200':
+          description: Active or completed order for this customer and listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          description: Authentication required
+        '404':
+          description: No active or completed order exists
+components:
+  schemas:
+    Order:
+      type: object
+      additionalProperties: false
+      required:
+        [orderId, customerId, listingId, slotId, status, createdAt, updatedAt]
+      properties:
+        orderId:
+          type: string
+        customerId:
+          type: string
+        listingId:
+          type: string
+        slotId:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, COMPLETE, CANCELLED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

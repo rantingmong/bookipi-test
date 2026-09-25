@@ -201,7 +201,7 @@ describe('listing feature', () => {
     })
   })
 
-  it('returns public listing metadata and slot-derived counts', async () => {
+  it('returns public listing metadata and order-derived sale counts', async () => {
     const listing = {
       listingId: 'flash-sale-2026',
       productName: 'Bookipi Pro',
@@ -211,6 +211,10 @@ describe('listing feature', () => {
     }
     const findOne = vi.fn(async () => listing)
     const countDocuments = vi.fn(async () => 15)
+    const countOrders = vi.fn(async (filter: Record<string, unknown>) => {
+      if (filter.status === 'COMPLETE') return 3
+      return 5
+    })
 
     await expect(
       getListingStatus(
@@ -218,6 +222,7 @@ describe('listing feature', () => {
         createModels({
           ListingModel: { findOne },
           ListingSlotModel: { countDocuments },
+          OrdersModel: { countDocuments: countOrders },
         }),
       ),
     ).resolves.toEqual({
@@ -228,11 +233,75 @@ describe('listing feature', () => {
       stockTotal: 15,
       reserveSlots: 5,
       publicStock: 10,
+      boughtUnits: 3,
+      remainingUnits: 5,
     })
     expect(findOne).toHaveBeenCalledWith({ listingId: 'flash-sale-2026' })
     expect(countDocuments).toHaveBeenCalledWith({
       listingId: 'flash-sale-2026',
     })
+    expect(countOrders).toHaveBeenCalledWith({
+      listingId: 'flash-sale-2026',
+      status: 'COMPLETE',
+    })
+    expect(countOrders).toHaveBeenCalledWith({
+      listingId: 'flash-sale-2026',
+      status: { $in: ['PENDING', 'COMPLETE'] },
+    })
+  })
+
+  it('does not count cancelled orders against remaining units', async () => {
+    const countDocuments = vi.fn(async () => 8)
+    const countOrders = vi.fn(async (filter: Record<string, unknown>) => {
+      if (filter.status === 'COMPLETE') return 2
+      return 4
+    })
+    const status = await getListingStatus(
+      'flash-sale-2026',
+      createModels({
+        ListingModel: {
+          findOne: vi.fn(async () => ({
+            listingId: 'flash-sale-2026',
+            productName: 'Bookipi Pro',
+            saleStartsAt: new Date('2026-10-01T10:00:00.000Z'),
+            saleEndsAt: new Date('2026-10-01T11:00:00.000Z'),
+            reserveSlots: 2,
+          })),
+        },
+        ListingSlotModel: { countDocuments },
+        OrdersModel: { countDocuments: countOrders },
+      }),
+    )
+
+    expect(status?.remainingUnits).toBe(2)
+    expect(status?.boughtUnits).toBe(2)
+  })
+
+  it('clamps remaining units at zero', async () => {
+    const status = await getListingStatus(
+      'flash-sale-2026',
+      createModels({
+        ListingModel: {
+          findOne: vi.fn(async () => ({
+            listingId: 'flash-sale-2026',
+            productName: 'Bookipi Pro',
+            saleStartsAt: new Date('2026-10-01T10:00:00.000Z'),
+            saleEndsAt: new Date('2026-10-01T11:00:00.000Z'),
+            reserveSlots: 2,
+          })),
+        },
+        ListingSlotModel: { countDocuments: vi.fn(async () => 5) },
+        OrdersModel: {
+          countDocuments: vi.fn(async (filter: Record<string, unknown>) => {
+            if (filter.status === 'COMPLETE') return 4
+            return 6
+          }),
+        },
+      }),
+    )
+
+    expect(status?.remainingUnits).toBe(0)
+    expect(status?.boughtUnits).toBe(4)
   })
 
   it('returns no public status for an unknown listing', async () => {

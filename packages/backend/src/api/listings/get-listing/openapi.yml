@@ -39,6 +39,8 @@ components:
           stockTotal,
           reserveSlots,
           publicStock,
+          boughtUnits,
+          remainingUnits,
         ]
       properties:
         listingId:
@@ -58,5 +60,11 @@ components:
           type: integer
           minimum: 0
         publicStock:
+          type: integer
+          minimum: 0
+        boughtUnits:
+          type: integer
+          minimum: 0
+        remainingUnits:
           type: integer
           minimum: 0

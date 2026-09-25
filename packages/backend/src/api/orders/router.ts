@@ -5,7 +5,7 @@ import { requireSession } from '#api/middleware/require-session'
 import { validateRequest } from '#api/middleware/validate'
 import { createRouter } from '#api/orders/generated/router'
 import { ordersHandlers } from '#api/orders/generated/handlers'
-import { orderIdSchema } from '#features/order/schema'
+import { listingOrderQuerySchema, orderIdSchema } from '#features/order/schema'
 import { paymentOutcomeSchema } from '#features/payment/schema'
 import type { SessionIdentity } from '#api/middleware/require-session'
 
@@ -17,6 +17,10 @@ export function createOrdersRouter({ resolveSession }: OrdersRouterOptions) {
   const router = Router()
 
   router.use(requireSession(resolveSession))
+  router.use(
+    '/orders/current',
+    validateRequest('query', listingOrderQuerySchema),
+  )
   router.use('/orders/:orderId', validateRequest('params', orderIdSchema))
   router.use(
     '/orders/:orderId/payment-outcome',
