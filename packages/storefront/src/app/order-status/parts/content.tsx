@@ -1,11 +1,18 @@
-import Link from 'next/link'
-import { usePaymentPageContext } from '../context'
+'use client'
 
-export function PaymentNotices() {
-  const state = usePaymentPageContext()
+import Link from 'next/link'
+import { useOrderStatusPageState } from '@/app/order-status/page.state'
+
+export default function Content() {
+  const state = useOrderStatusPageState()
 
   return (
-    <>
+    <main className="group" data-state={state.viewState}>
+      <h1>Order status</h1>
+      <p>Order: {state.orderId || 'Not provided'}</p>
+      <p className="hidden group-data-[state=payment-pending]:block group-data-[state=complete]:block group-data-[state=cancelled]:block">
+        Status: {state.order?.status}
+      </p>
       <p className="hidden group-data-[state=auth-loading]:block">
         Checking your sign-in status…
       </p>
@@ -30,6 +37,7 @@ export function PaymentNotices() {
         Payment cancelled.
       </p>
       <p aria-live="polite">{state.errorMessage}</p>
-    </>
+      <Link href="/">Return to sale</Link>
+    </main>
   )
 }

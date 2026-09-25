@@ -141,10 +141,17 @@ describe('createApp', () => {
       createdAt: new Date('2026-09-24T00:00:00.000Z'),
       updatedAt: new Date('2026-09-24T00:00:00.000Z'),
     }
-    const findOne = async (query: Record<string, string>) => {
+    const findOne = async (query: Record<string, unknown>) => {
       if (
         query.orderId === 'order-001' &&
         query.customerId === 'customer-001'
+      ) {
+        return order
+      }
+      if (
+        query.listingId === 'listing-001' &&
+        query.customerId === 'customer-001' &&
+        typeof query.status === 'object'
       ) {
         return order
       }
@@ -173,6 +180,16 @@ describe('createApp', () => {
         status: 'PENDING',
       })
 
+      const currentResponse = await fetch(
+        `http://127.0.0.1:${address.port}/api/orders/current?listingId=listing-001`,
+      )
+      expect(currentResponse.status).toBe(200)
+      expect(await currentResponse.json()).toMatchObject({
+        orderId: 'order-001',
+        listingId: 'listing-001',
+        status: 'PENDING',
+      })
+
       const absentResponse = await fetch(
         `http://127.0.0.1:${address.port}/api/orders/missing`,
       )
@@ -194,6 +211,10 @@ describe('createApp', () => {
         `http://127.0.0.1:${anonymousAddress.port}/api/orders/order-001`,
       )
       expect(anonymousResponse.status).toBe(401)
+      const anonymousCurrentResponse = await fetch(
+        `http://127.0.0.1:${anonymousAddress.port}/api/orders/current?listingId=listing-001`,
+      )
+      expect(anonymousCurrentResponse.status).toBe(401)
       await new Promise<void>((resolve, reject) => {
         anonymousServer.close((error) => {
           if (error) reject(error)
@@ -365,10 +386,12 @@ describe('createApp', () => {
       }
     })
     const countDocuments = vi.fn(async () => 10)
+    const countOrders = vi.fn(async () => 0)
     const app = createApp({
       models: createModels({
         ListingModel: { findOne },
         ListingSlotModel: { countDocuments },
+        OrdersModel: { countDocuments: countOrders },
       }),
     })
     const server = app.listen(0)
@@ -389,6 +412,8 @@ describe('createApp', () => {
         stockTotal: 10,
         reserveSlots: 2,
         publicStock: 8,
+        boughtUnits: 0,
+        remainingUnits: 8,
       })
 
       const missing = await fetch(

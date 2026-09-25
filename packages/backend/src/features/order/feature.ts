@@ -34,6 +34,18 @@ export async function findOwnedOrder(
   return order
 }
 
+export async function findOwnedOrderForListing(
+  models: Models,
+  listingId: string,
+  customerId: string,
+): Promise<OrderDocument | null> {
+  return models.OrdersModel.findOne({
+    listingId,
+    customerId,
+    status: { $in: ['PENDING', 'COMPLETE'] },
+  })
+}
+
 export async function applyReservationFacts(
   models: Models,
   facts: ReservationFacts,

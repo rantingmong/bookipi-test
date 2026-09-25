@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import useSWRMutation from 'swr/mutation'
 import { authClient } from '@/lib/features/auth.client'
@@ -23,6 +23,7 @@ const persistenceWaitMs = 15000
 
 export function usePaymentPageState() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const orderId = searchParams.get('orderId')
   const session = authClient.useSession()
   const customerId = session.data?.user.id
@@ -148,8 +149,10 @@ export function usePaymentPageState() {
   })()
 
   async function applyOutcome(outcome: 'success' | 'failure') {
-    await outcomeMutation.trigger(outcome)
-    await orderQuery.mutate()
+    const result = await outcomeMutation.trigger(outcome)
+    if (!result || !orderId) return
+    await orderQuery.mutate(result, { revalidate: false })
+    router.push(`/order-status?orderId=${encodeURIComponent(orderId)}`)
   }
 
   return {

@@ -46,6 +46,14 @@ Run `pnpm build` to build all packages and then run the same integration suite t
 
 Run `pnpm package:lambdas` to build and package the checkout Lambda without starting Docker. It writes ignored output to `.artifacts/lambdas`.
 
+## k6 checkout setup
+
+Run `node scripts/test-integration.mjs --prepare-k6` from the repository root. The command uses `.localstack`, builds the checkout Lambda, builds and starts Compose, deploys the LocalStack template, starts the backend, waits for backend health, and seeds one active listing. It skips the integration acceptance gates. It prints the listing ID and sale window. It leaves the stack running after successful preparation and stops it after a preparation failure.
+
+Then run the preload and k6 commands in [the k6 checkout guide](../load-tests/README.md). The preload command creates Better Auth users in MongoDB and writes their session cookies to an ignored file. Keep that file private and remove it after the test. Valkey loss or reset invalidates the sessions. Do not use this command against production data.
+
+The k6 script calls checkout only. It does not follow the payment redirect or record payment outcomes. After the test, use the stop command in the k6 guide. It supplies dummy values for Compose interpolation and does not require the secret values.
+
 ## Integration checks
 
 The suite stops at the first failed gate. It checks these gates in order:

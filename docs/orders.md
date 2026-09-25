@@ -18,6 +18,8 @@ stateDiagram-v2
 
 The order stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. The SQS worker validates `order-reserved.v1` and inserts its immutable facts with status `PENDING`. `GET /api/orders/{orderId}` returns the order only to its authenticated owner. It returns `404` for an absent or non-owned order. The mock payment page acts on `orderId` after the worker persists the order.
 
+`GET /api/orders/current?listingId=...` returns the current authenticated customer's `PENDING` or `COMPLETE` order for that listing. It returns `404` when no such order exists. It does not return cancelled orders.
+
 The payment feature handles `POST /api/orders/{orderId}/payment-outcome` whenever the backend order routes are configured. It changes only a `PENDING` order. Success sets `COMPLETE`. Failure or expiry sets `CANCELLED` and `releaseStatus: PENDING` in one atomic order update. Either `failure` or `expired` can retry the same `CANCELLED` terminal status. A different terminal status returns `409`. After an SQS upsert or payment outcome, the order feature checks that returned durable order. If release is pending, it calls guarded Valkey release and marks it complete only after success.
 
 If the process stops after MongoDB stores cancellation and no caller retries, no background sweep repairs the pending release. SQS retries when reconciliation fails before acknowledgement. A payment caller must retry a failed or interrupted outcome request.
@@ -60,3 +62,7 @@ The queue deployment must set a dead-letter policy for messages that keep failin
 - Added idempotent persistence for immutable reservation facts from SQS.
 - Added authenticated reads and atomic payment outcome transitions.
 - Added atomic cancellation release intents and trigger-driven guarded release.
+
+### 2026-09-25
+
+- Added the authenticated current-order lookup for the home page.

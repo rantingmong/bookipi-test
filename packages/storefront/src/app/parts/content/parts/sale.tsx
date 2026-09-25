@@ -20,11 +20,22 @@ export function SalePart() {
       </p>
       <div className="hidden group-data-[listing=ready]:block">
         <p>{state.listing?.productName}</p>
+        <p className="hidden group-data-[sale-window=checking]:block">
+          Checking sale status…
+        </p>
+        <p className="hidden group-data-[sale-window=upcoming]:block">
+          The sale has not started.
+        </p>
+        <p className="hidden group-data-[sale-window=open]:block">
+          The sale has started.
+        </p>
+        <p className="hidden group-data-[sale-window=ended]:block">
+          The sale has ended.
+        </p>
         <p>Sale opens: {state.listing?.saleStartsAt}</p>
         <p>Sale closes: {state.listing?.saleEndsAt}</p>
-        <p>Total units: {state.listing?.stockTotal}</p>
-        <p>Reserved units: {state.listing?.reserveSlots}</p>
-        <p>Public units: {state.listing?.publicStock}</p>
+        <p>Units available: {state.listing?.remainingUnits}</p>
+        <p>Units bought: {state.listing?.boughtUnits}</p>
       </div>
     </section>
   )

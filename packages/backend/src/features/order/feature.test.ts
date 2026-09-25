@@ -4,6 +4,7 @@ import type { Models } from '#types'
 import {
   applyReservationFacts,
   findOwnedOrder,
+  findOwnedOrderForListing,
   OrderNotFoundError,
   orderInputSchema,
   orderStatuses,
@@ -49,6 +50,30 @@ describe('order feature', () => {
     await expect(
       findOwnedOrder(createModels({ findOne }), 'order-hidden', 'customer-002'),
     ).rejects.toBeInstanceOf(OrderNotFoundError)
+  })
+
+  it('returns the current customer order for a listing', async () => {
+    const order = {
+      orderId: 'order-owned',
+      customerId: 'customer-001',
+      listingId: 'listing-001',
+      slotId: 'listing-001:slot:0001',
+      status: 'PENDING',
+    }
+    const findOne = vi.fn(async () => order)
+
+    await expect(
+      findOwnedOrderForListing(
+        createModels({ findOne }),
+        'listing-001',
+        'customer-001',
+      ),
+    ).resolves.toBe(order)
+    expect(findOne).toHaveBeenCalledWith({
+      listingId: 'listing-001',
+      customerId: 'customer-001',
+      status: { $in: ['PENDING', 'COMPLETE'] },
+    })
   })
 
   it('releases a pending cancelled order and marks it complete after Valkey confirms', async () => {

@@ -1,4 +1,8 @@
-import { getOrder, postPaymentOutcome } from '@/lib/api/generated/client'
+import {
+  getCurrentOrder,
+  getOrder,
+  postPaymentOutcome,
+} from '@/lib/api/generated/client'
 import { ApiError } from '@/lib/api/generated/client'
 import type { Order } from '@/lib/api/generated/models'
 
@@ -16,6 +20,17 @@ function createRequestConfig(baseUrl: string) {
 export async function readOrder(baseUrl: string, orderId: string) {
   try {
     return await getOrder(orderId, createRequestConfig(baseUrl))
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null
+    }
+    throw error
+  }
+}
+
+export async function readCurrentOrder(baseUrl: string, listingId: string) {
+  try {
+    return await getCurrentOrder({ listingId }, createRequestConfig(baseUrl))
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return null

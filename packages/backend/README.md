@@ -16,6 +16,8 @@ The API exposes public `GET /api/listings/{listingId}` status. It returns listin
 
 The environment feature validates startup settings in `src/features/env`. The auth feature owns authentication behavior and session identity mapping in `src/features/auth`. The MongoDB service uses one Mongoose connection and exposes its native MongoDB client and database to Better Auth. The MongoDB, SQS, and Valkey clients live in `src/services`.
 
+The load-test feature creates unique Better Auth users and returns their session cookies. `src/load-test.ts` is a local setup command. It uses the validated backend MongoDB and Valkey settings. It does not add an HTTP route. Run `node packages/backend/dist/load-test.js <positive-count>` in the backend container. The command writes one session JSON object to standard output. Keep that output private. Valkey loss or reset invalidates the sessions.
+
 Set `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL`. Set `STOREFRONT_ORIGIN` when the storefront uses a different origin. Better Auth stores users and credentials in MongoDB and sessions in Valkey secondary storage under `bookipi:auth:`. Sessions do not fall back to MongoDB.
 
 Backend startup requires `AWS_REGION` and `SQS_QUEUE_URL` for the SQS worker, in addition to the backend settings above.
@@ -53,6 +55,8 @@ The worker long-polls up to ten SQS messages for 20 seconds. It validates each b
 The feature can add a positive integer number of slots to an existing listing. It preserves `reserveSlots` and the listing fields. It counts current slot documents, inserts only the next sequential slot IDs, and returns derived counts in one transaction. Concurrent additions serialize through a write to the listing timestamp. The unique `{ listingId, slotId }` index also rejects a duplicate slot ID.
 
 Run `pnpm --filter @bookipi/backend seed` to create one deterministic listing with `reserveSlots: 2` and ten available slots. It derives 10 total slots and 8 public slots from slot data. It publishes Valkey inventory through `createListing`. Set `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL` before you run it. A second run with identical facts and state succeeds idempotently. Conflicting facts or inconsistent existing state fail closed.
+
+The load-test session feature has a focused unit test. It verifies user creation, session-cookie extraction, and failure when Better Auth does not return a cookie. It does not prove MongoDB or Valkey integration.
 
 Use the `#app`, `#api/*`, `#features/*`, `#services/*`, and `#types` imports for backend code. The package maps resolve TypeScript source during development and compiled JavaScript after build. Do not edit generated API output.
 
@@ -166,3 +170,7 @@ The local integration stack uses a replica-set MongoDB, Valkey, LocalStack SQS a
 - Added the direct SQS reservation worker and immutable order upsert.
 - Added authenticated order reads and local or test payment outcomes. MongoDB integration checks remain pending.
 - Added public listing status with counts derived from durable slot documents.
+
+### 2026-09-25
+
+- Added a local command to preload Better Auth sessions for k6 checkout tests.

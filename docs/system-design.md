@@ -50,7 +50,9 @@ The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`,
 
 The listing document stores identity, display name, sale window, and `reserveSlots`. The initial slot count is an operation parameter. MongoDB derives total stock from slot documents and derives public stock by subtracting `reserveSlots`. Valkey holds the live availability pool.
 
-The storefront reads public listing metadata and slot-derived counts from `GET /api/listings/{listingId}`. This read does not expose slot IDs or claim that `publicStock` is live remaining stock. Checkout errors from the Valkey claim determine sold-out state.
+The storefront reads public listing metadata and counts from `GET /api/listings/{listingId}`. This read does not expose slot IDs. It keeps `publicStock = stockTotal - reserveSlots`, counts `boughtUnits` from `COMPLETE` orders, and derives `remainingUnits = max(0, publicStock - PENDING orders - COMPLETE orders)`. These MongoDB counts do not show the live Valkey pool. Checkout errors from the Valkey claim determine sold-out state.
+
+The home page reads `GET /api/orders/current?listingId=...` for the signed-in customer. This route returns only that customer's `PENDING` or `COMPLETE` order. It shows the order ID and status, links pending orders to `/payment`, and links completed orders to `/order-status`. After a successful mock outcome, `/payment` opens `/order-status?orderId=...`, which reads the authenticated order again.
 
 The design has no durable replay for a Lambda crash after the Valkey pop and before SQS accepts the event.
 
