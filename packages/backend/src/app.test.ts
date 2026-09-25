@@ -14,8 +14,16 @@ function createModels(
   return {
     ListingModel: {},
     ListingSlotModel: {},
-    OrdersModel: {},
     ...overrides,
+    OrdersModel: {
+      db: {
+        startSession: async () => ({
+          withTransaction: async (callback: () => Promise<void>) => callback(),
+          endSession: async () => undefined,
+        }),
+      },
+      ...overrides.OrdersModel,
+    },
   } as unknown as Models
 }
 
@@ -245,6 +253,12 @@ describe('createApp', () => {
       updatedAt: new Date('2026-09-24T00:00:00.000Z'),
     }
     const ordersModel = {
+      db: {
+        startSession: async () => ({
+          withTransaction: async (callback: () => Promise<void>) => callback(),
+          endSession: async () => undefined,
+        }),
+      },
       findOne: async () => order,
       findOneAndUpdate: async (
         _filter: unknown,
@@ -256,10 +270,23 @@ describe('createApp', () => {
       },
       updateOne: async () => ({ modifiedCount: 1 }),
     }
+    const slotsModel = {
+      findOneAndUpdate: async () => ({
+        listingId: 'listing-001',
+        slotId: 'listing-001:slot:0001',
+        state: 'secured',
+        orderId: 'order-001',
+        customerId: 'customer-001',
+      }),
+      findOne: async () => null,
+    }
     const evalScript = vi.fn(async () => 1)
     const resolver = vi.fn(async () => ({ customerId: 'customer-001' }))
     const enabledApp = createApp({
-      models: createModels({ OrdersModel: ordersModel }),
+      models: createModels({
+        OrdersModel: ordersModel,
+        ListingSlotModel: slotsModel,
+      }),
       resolveSession: resolver,
       valkey: { eval: evalScript } as never,
     })

@@ -81,7 +81,30 @@ describe('environment feature', () => {
       listingId: 'integration-sale',
       saleStartsAt: '2026-09-25T00:00:00.000Z',
       saleEndsAt: '2026-09-26T00:00:00.000Z',
+      initialSlotCount: undefined,
+      reserveSlots: undefined,
     })
+  })
+
+  it('reads configurable seed counts as positive and non-negative integers', () => {
+    expect(
+      readListingSeedOverrides({
+        DEMO_INITIAL_SLOT_COUNT: '300',
+        DEMO_RESERVE_SLOTS: '0',
+      }),
+    ).toEqual({
+      listingId: undefined,
+      saleStartsAt: undefined,
+      saleEndsAt: undefined,
+      initialSlotCount: 300,
+      reserveSlots: 0,
+    })
+    expect(() =>
+      readListingSeedOverrides({ DEMO_INITIAL_SLOT_COUNT: '0' }),
+    ).toThrow()
+    expect(() =>
+      readListingSeedOverrides({ DEMO_RESERVE_SLOTS: '-1' }),
+    ).toThrow()
   })
 
   it('requires MongoDB and Valkey settings for the seed command', () => {

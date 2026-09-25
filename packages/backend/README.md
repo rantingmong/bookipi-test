@@ -22,7 +22,7 @@ Set `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `MONGODB_URI`, `MONGODB_DATABASE`, 
 
 Backend startup requires `AWS_REGION` and `SQS_QUEUE_URL` for the SQS worker, in addition to the backend settings above.
 
-Set optional `SQS_ENDPOINT_URL` to `http://localstack:4566` in the local stack. The seed accepts `DEMO_LISTING_ID`, `DEMO_SALE_STARTS_AT`, and `DEMO_SALE_ENDS_AT` overrides for a unique active integration sale.
+Set optional `SQS_ENDPOINT_URL` to `http://localstack:4566` in the local stack. The seed accepts `DEMO_LISTING_ID`, `DEMO_SALE_STARTS_AT`, `DEMO_SALE_ENDS_AT`, `DEMO_INITIAL_SLOT_COUNT`, and `DEMO_RESERVE_SLOTS` overrides.
 
 The authenticated payment outcome route is available whenever the order routes are configured.
 
@@ -54,7 +54,7 @@ The worker long-polls up to ten SQS messages for 20 seconds. It validates each b
 
 The feature can add a positive integer number of slots to an existing listing. It preserves `reserveSlots` and the listing fields. It counts current slot documents, inserts only the next sequential slot IDs, and returns derived counts in one transaction. Concurrent additions serialize through a write to the listing timestamp. The unique `{ listingId, slotId }` index also rejects a duplicate slot ID.
 
-Run `pnpm --filter @bookipi/backend seed` to create one deterministic listing with `reserveSlots: 2` and ten available slots. It derives 10 total slots and 8 public slots from slot data. It publishes Valkey inventory through `createListing`. Set `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL` before you run it. A second run with identical facts and state succeeds idempotently. Conflicting facts or inconsistent existing state fail closed.
+Run `pnpm --filter @bookipi/backend seed` to create one deterministic listing with `reserveSlots: 2` and ten available slots by default. Set `DEMO_INITIAL_SLOT_COUNT` to change the positive slot count. Set `DEMO_RESERVE_SLOTS` to change the non-negative reserve count. The reserve count cannot exceed the slot count. The seed derives `stockTotal` and `publicStock` from slot data. It publishes Valkey inventory through `createListing`. Set `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL` before you run it. A second run with identical facts and state succeeds idempotently. Conflicting facts or inconsistent existing state fail closed.
 
 The load-test session feature has a focused unit test. It verifies user creation, session-cookie extraction, and failure when Better Auth does not return a cookie. It does not prove MongoDB or Valkey integration.
 
@@ -84,7 +84,7 @@ After SQS accepts the reservation event, Lambda returns the `orderId`, `PENDING`
 
 The worker long-polls SQS directly. The selected design has no SQS-to-Lambda event source mapping.
 
-The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. It does not store the client idempotency key. The payment feature applies mock outcomes only from `PENDING`: success sets `COMPLETE`; failure or expiry sets `CANCELLED` and release status `PENDING` in one atomic document update. Same-result retries are safe. A conflicting terminal result returns `409`.
+The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. It does not store the client idempotency key. The payment feature applies mock outcomes only from `PENDING`: one MongoDB transaction sets `COMPLETE` and secures the matching listing slot; failure or expiry sets `CANCELLED` and release status `PENDING` in one atomic order update. A failed slot write rolls back success. A same-success retry repairs a missing slot link. The slot update does not overwrite another order's link. Same-result retries are safe. A conflicting terminal result returns `409`.
 
 A cancelled order keeps its original `(listingId, customerId, client idempotencyKey)` binding. A new client key can start a new checkout for that customer and listing.
 
@@ -174,3 +174,5 @@ The local integration stack uses a replica-set MongoDB, Valkey, LocalStack SQS a
 ### 2026-09-25
 
 - Added a local command to preload Better Auth sessions for k6 checkout tests.
+- Added demo seed slot and reserve count overrides.
+- Secured listing slots for completed orders and repaired missing links on retry.

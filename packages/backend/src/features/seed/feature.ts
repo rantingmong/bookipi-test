@@ -14,6 +14,8 @@ export type ListingSeedOverrides = {
   listingId?: string
   saleStartsAt?: string
   saleEndsAt?: string
+  initialSlotCount?: number
+  reserveSlots?: number
 }
 
 export async function seedListingData(
@@ -24,6 +26,10 @@ export async function seedListingData(
   if (overrides.listingId) listing.listingId = overrides.listingId
   if (overrides.saleStartsAt) listing.saleStartsAt = overrides.saleStartsAt
   if (overrides.saleEndsAt) listing.saleEndsAt = overrides.saleEndsAt
+  if (overrides.initialSlotCount !== undefined)
+    listing.initialSlotCount = overrides.initialSlotCount
+  if (overrides.reserveSlots !== undefined)
+    listing.reserveSlots = overrides.reserveSlots
   const parsedListing = listingInputSchema.parse(listing)
   const existing = await dependencies.ListingModel.findOne({
     listingId: parsedListing.listingId,

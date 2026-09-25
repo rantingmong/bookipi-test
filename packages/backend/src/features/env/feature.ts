@@ -75,5 +75,7 @@ export function readListingSeedOverrides(
     listingId: config.DEMO_LISTING_ID,
     saleStartsAt: config.DEMO_SALE_STARTS_AT,
     saleEndsAt: config.DEMO_SALE_ENDS_AT,
+    initialSlotCount: config.DEMO_INITIAL_SLOT_COUNT,
+    reserveSlots: config.DEMO_RESERVE_SLOTS,
   }
 }

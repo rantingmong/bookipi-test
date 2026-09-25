@@ -37,23 +37,28 @@ if (!listingId) {
   throw new Error('Set K6_LISTING_ID to the listing ID for this test.')
 }
 
-let iterations = sessions.length
-if (__ENV.K6_ITERATIONS) {
-  iterations = Number(__ENV.K6_ITERATIONS)
+let iterationsPerVu = 10
+if (__ENV.K6_ITERATIONS_PER_VU) {
+  iterationsPerVu = Number(__ENV.K6_ITERATIONS_PER_VU)
 }
-if (!Number.isSafeInteger(iterations) || iterations < 1) {
-  throw new Error('K6_ITERATIONS must be a positive safe integer.')
+if (!Number.isSafeInteger(iterationsPerVu) || iterationsPerVu < 1) {
+  throw new Error('K6_ITERATIONS_PER_VU must be a positive safe integer.')
 }
-if (iterations > sessions.length) {
-  throw new Error('K6_ITERATIONS cannot exceed the preloaded session count.')
-}
-
-let vus = Math.min(10, iterations)
+let vus = 10
 if (__ENV.K6_VUS) {
   vus = Number(__ENV.K6_VUS)
 }
 if (!Number.isSafeInteger(vus) || vus < 1) {
   throw new Error('K6_VUS must be a positive safe integer.')
+}
+const totalIterations = vus * iterationsPerVu
+if (
+  !Number.isSafeInteger(totalIterations) ||
+  totalIterations > sessions.length
+) {
+  throw new Error(
+    'The preloaded session count must cover K6_VUS multiplied by K6_ITERATIONS_PER_VU.',
+  )
 }
 
 let maxDuration = '10m'
@@ -69,9 +74,9 @@ if (__ENV.K6_ORIGIN) {
 export const options = {
   scenarios: {
     checkout: {
-      executor: 'shared-iterations',
+      executor: 'per-vu-iterations',
       vus,
-      iterations,
+      iterations: iterationsPerVu,
       maxDuration,
     },
   },
@@ -81,6 +86,14 @@ export const options = {
 }
 
 const checkoutOutcomes = new Counter('checkout_outcomes')
+const acceptedOutcomes = new Counter('checkout_accepted')
+const soldOutOutcomes = new Counter('checkout_sold_out')
+const conflictOutcomes = new Counter('checkout_other_conflict')
+const unexpectedOutcomes = new Counter('checkout_unexpected')
+const status202Outcomes = new Counter('checkout_status_202')
+const status409Outcomes = new Counter('checkout_status_409')
+const status0Outcomes = new Counter('checkout_status_0')
+const otherStatusOutcomes = new Counter('checkout_status_other')
 
 export default function () {
   const iteration = exec.scenario.iterationInTest
@@ -120,6 +133,14 @@ export default function () {
   }
 
   checkoutOutcomes.add(1, { outcome })
+  if (response.status === 202) status202Outcomes.add(1)
+  else if (response.status === 409) status409Outcomes.add(1)
+  else if (response.status === 0) status0Outcomes.add(1)
+  else otherStatusOutcomes.add(1)
+  if (outcome === 'accepted') acceptedOutcomes.add(1)
+  if (outcome === 'sold_out') soldOutOutcomes.add(1)
+  if (outcome === 'other_conflict') conflictOutcomes.add(1)
+  if (outcome === 'unexpected') unexpectedOutcomes.add(1)
   check(response, {
     'checkout is accepted or sold out': () =>
       outcome === 'accepted' || outcome === 'sold_out',

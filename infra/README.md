@@ -48,11 +48,13 @@ Run `pnpm package:lambdas` to build and package the checkout Lambda without star
 
 ## k6 checkout setup
 
-Run `node scripts/test-integration.mjs --prepare-k6` from the repository root. The command uses `.localstack`, builds the checkout Lambda, builds and starts Compose, deploys the LocalStack template, starts the backend, waits for backend health, and seeds one active listing. It skips the integration acceptance gates. It prints the listing ID and sale window. It leaves the stack running after successful preparation and stops it after a preparation failure.
+Run `node scripts/test-integration.mjs --prepare-k6` from the repository root. The command reads `.localstack`, or the path in `LOCALSTACK_TOKEN_FILE`. It builds the checkout Lambda, builds and starts Compose, deploys the LocalStack template, starts the backend, waits for backend health, and seeds one active listing. It skips the integration acceptance gates. In prepare mode, `K6_AVAILABLE_UNITS` accepts `20`, `40`, or `80` and defaults to `20`. The seed sets `reserveSlots` to zero. It prints the listing ID, available units, and sale window. It leaves the stack running after successful preparation and stops it after a preparation failure.
 
-Then run the preload and k6 commands in [the k6 checkout guide](../load-tests/README.md). The preload command creates Better Auth users in MongoDB and writes their session cookies to an ignored file. Keep that file private and remove it after the test. Valkey loss or reset invalidates the sessions. Do not use this command against production data.
+Run `node scripts/run-k6-benchmark.mjs` for the sequential 10, 20, and 40 VU profiles. Each VU performs 10 iterations, for 100, 200, and 400 total attempts with 20, 40, and 80 available units. Each run uses separate Compose project names and volumes, uses the official `grafana/k6:1.5.0` container on the fixed `bookipi-local` network, completes accepted orders through the owner API, checks iteration counts and MongoDB order and secured-slot bindings, writes JSON and HTML reports, then removes each test's project and volumes. It does not remove the existing `bookipi-local_mongodb-data` volume. Run only one local stack at a time because the Compose network and published ports have fixed names.
 
-The k6 script calls checkout only. It does not follow the payment redirect or record payment outcomes. After the test, use the stop command in the k6 guide. It supplies dummy values for Compose interpolation and does not require the secret values.
+For a manual test, use the preload and k6 commands in [the k6 checkout guide](../load-tests/README.md). The preload command creates Better Auth users in MongoDB and writes their session cookies to an ignored file. Keep that file private and remove it after the test. Valkey loss or reset invalidates the sessions. Do not use this command against production data.
+
+The manual k6 script calls checkout only. It does not follow the payment redirect or record payment outcomes. After the test, use the stop command in the k6 guide. It supplies dummy values for Compose interpolation and does not require the secret values.
 
 ## Integration checks
 

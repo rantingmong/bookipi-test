@@ -65,11 +65,11 @@ Deployment checks must verify CloudFront routing, session-cookie forwarding, `Or
 
 ## Stress tests with k6
 
-The first k6 script measures authenticated checkout requests with preloaded Better Auth sessions. The local setup command creates unique test users and actual session cookies through Better Auth. It does not expose a protected HTTP setup route. See the [k6 checkout guide](../load-tests/README.md) for setup and run commands.
+The k6 script measures authenticated checkout requests with preloaded Better Auth sessions. The local setup command creates unique test users and actual session cookies through Better Auth. It does not expose a protected HTTP setup route. The three-run runner uses 10, 20, and 40 VUs with 10 iterations per VU. It preloads 100, 200, and 400 sessions and lists with 20, 40, and 80 available units. It expects 20, 40, and 80 accepted attempts, plus 80, 160, and 320 sold-out attempts. It then completes accepted orders through the owner API and checks the durable MongoDB order and secured-slot bindings. It records counts for HTTP 202, HTTP 409, status 0, and other responses. It saves sanitized k6 output on failure. See the [k6 checkout guide](../load-tests/README.md) for setup and run commands.
 
-Use one session for each checkout iteration. The shared-iterations scenario selects sessions by `exec.scenario.iterationInTest`, so `K6_ITERATIONS` must not exceed the session count. The script classifies HTTP 202 as accepted and HTTP 409 `SOLD_OUT` as expected. Other conflicts and responses fail the check. It does not follow the payment redirect or submit payment outcomes. Resetting Valkey invalidates all preloaded sessions.
+Use one session for each checkout attempt. The `per-vu-iterations` scenario selects sessions by `exec.scenario.iterationInTest`, so the preloaded session count must cover VUs multiplied by iterations per VU. The runner checks the actual k6 `iterations.count` against that product. The script classifies HTTP 202 as accepted and HTTP 409 `SOLD_OUT` as expected. Other conflicts and responses fail the check. It does not follow the payment redirect or submit payment outcomes. Resetting Valkey invalidates all preloaded sessions.
 
-Each report must state the endpoint, listing, iteration count, virtual-user count, environment, and outcome metrics. This script does not test payment outcomes, SQS delays, or service failures. A local test does not prove deployed Lambda, API Gateway, or CloudFront behavior.
+Each report states the endpoint, listing, iterations per VU, total iterations, virtual-user count, environment, outcome metrics, completed order count, secured slot count, slot ownership checks, and cleanup result. The runner stores JSON and HTML reports under `.artifacts/k6-runs/` before each test stack is removed. Payment outcomes run after k6 and do not affect the measured interval. The stress test does not test SQS delays or service failures. A local test does not prove deployed Lambda, API Gateway, or CloudFront behavior.
 
 ## Invariants and acceptance criteria
 
@@ -96,7 +96,7 @@ Each report must state the endpoint, listing, iteration count, virtual-user coun
 
 The default seed creates one listing with `reserveSlots: 2` and ten available slot documents. Reads derive 10 total slots and 8 public slots. The seed publishes Valkey inventory and does not create orders. A repeat run with identical facts and state succeeds idempotently. Conflicting facts or inconsistent existing state fail closed. The integration suite uses a unique listing ID and active sale window for each run.
 
-This increment has no measured load values. Later increments will define service targets after the local baseline and deployment shape are known.
+The benchmark harness defines three local load profiles. The run must record actual values before anyone reports a performance result. Later increments will define service targets after the local baseline and deployment shape are known.
 
 Unit tests do not prove atomic Valkey behavior or MongoDB transaction behavior. The local integration suite verifies the end-to-end reservation and payment path with a MongoDB replica set, Valkey, LocalStack API Gateway, Lambda, and SQS. Valkey concurrency, stress behavior, deployed Lambda, deployed API Gateway, and CloudFront remain unverified.
 

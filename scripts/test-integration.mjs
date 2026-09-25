@@ -6,9 +6,18 @@ import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const prepareK6 = process.argv.slice(2).includes('--prepare-k6')
+let k6AvailableUnits = 20
+if (prepareK6 && process.env.K6_AVAILABLE_UNITS) {
+  k6AvailableUnits = Number(process.env.K6_AVAILABLE_UNITS)
+}
+if (prepareK6 && ![20, 40, 80].includes(k6AvailableUnits)) {
+  throw new Error('K6_AVAILABLE_UNITS must be 20, 40, or 80')
+}
 let browserOrigin = process.env.LOCAL_BROWSER_ORIGIN
 if (!browserOrigin) browserOrigin = 'http://bookipi.localhost:3200'
-const tokenPath = resolve(root, '.localstack')
+let tokenFile = process.env.LOCALSTACK_TOKEN_FILE
+if (!tokenFile) tokenFile = '.localstack'
+const tokenPath = resolve(root, tokenFile)
 let authToken = ''
 try {
   authToken = (await readFile(tokenPath, 'utf8')).trim()
@@ -760,9 +769,12 @@ try {
     const now = Date.now()
     saleStartsAt = new Date(now - 60_000).toISOString()
     saleEndsAt = new Date(now + 3_600_000).toISOString()
-    await runSeed()
+    await runSeed({
+      DEMO_INITIAL_SLOT_COUNT: String(k6AvailableUnits),
+      DEMO_RESERVE_SLOTS: '0',
+    })
     process.stdout.write(
-      `K6_PREPARE PASS\nK6_LISTING_ID=${listingId}\nK6_SALE_STARTS_AT=${saleStartsAt}\nK6_SALE_ENDS_AT=${saleEndsAt}\n`,
+      `K6_PREPARE PASS\nK6_LISTING_ID=${listingId}\nK6_AVAILABLE_UNITS=${k6AvailableUnits}\nK6_SALE_STARTS_AT=${saleStartsAt}\nK6_SALE_ENDS_AT=${saleEndsAt}\n`,
     )
     keepStackRunning = true
   } else {

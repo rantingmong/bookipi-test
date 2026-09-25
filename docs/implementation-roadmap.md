@@ -171,7 +171,7 @@ Deployment verification remains required. Check CloudFront routing, cookie and O
 
 ## Increment 9: stress and resilience evidence
 
-Status: checkout load-test setup implemented. No k6 load result exists yet.
+Status: checkout load-test setup and three-run report harness implemented. No k6 load result exists yet.
 
 Angle A: run k6 against the local service set first, then repeat against the selected deployment shape.
 
@@ -181,7 +181,7 @@ Selection recorded by this design: Angle A.
 
 Reason: local repeatability exposes invariant failures before deployment cost.
 
-The local setup command creates an active sale and keeps the stack running. A separate command creates Better Auth users and session cookies. The first k6 script sends one checkout request per preloaded session. Run it and record throughput, latency percentiles, error rate, and checkout outcomes before adding failure tests.
+The local runner creates separate stacks for 10, 20, and 40 VUs. Each VU performs 10 iterations, which gives 100, 200, and 400 preloaded Better Auth sessions. The listings have 20, 40, and 80 available units. The expected outcomes are 20, 40, and 80 accepted orders, plus 80, 160, and 320 sold-out responses. After each measured run, it completes accepted orders through the owner API and verifies exact iteration counts, order counts, and secured slot ownership in MongoDB. It saves JSON and HTML reports before it removes that run's project volumes. The harness does not count as load evidence. Run it and review the reports before anyone reports throughput, latency percentiles, error rate, or checkout outcomes.
 
 Further verification remains planned for failure injection, recovery time, event-order permutations, release replay, and every invariant in `docs/testing-strategy.md`.
 

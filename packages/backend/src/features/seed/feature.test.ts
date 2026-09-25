@@ -86,6 +86,37 @@ describe('demo seed feature', () => {
     })
   })
 
+  it('seeds the requested number of claimable slots with no reserve', async () => {
+    const session = {
+      withTransaction: vi.fn(async (callback) => callback()),
+      endSession: vi.fn(),
+    }
+    const create = vi.fn(async (_documents: unknown[]) => undefined)
+    const insertMany = vi.fn(async (..._args: unknown[]) => undefined)
+    const evalScript = vi.fn().mockResolvedValueOnce(3).mockResolvedValueOnce(1)
+    const dependencies = {
+      mongoConnection: { startSession: vi.fn(async () => session) },
+      ListingModel: { create, findOne: vi.fn(async () => null) },
+      ListingSlotModel: { insertMany, find: vi.fn(async () => []) },
+      OrdersModel: {} as unknown as Model<OrderDocument>,
+      valkeyConnection: {
+        eval: evalScript,
+        llen: vi.fn(async () => 3),
+        hget: vi.fn(async () => '3'),
+      },
+    }
+
+    const result = await seedListingData(
+      dependencies as unknown as StorageDependencies,
+      { initialSlotCount: 3, reserveSlots: 0 },
+    )
+
+    expect(result.stockTotal).toBe(3)
+    expect(result.reserveSlots).toBe(0)
+    expect(result.publicStock).toBe(3)
+    expect(insertMany.mock.calls[0]?.[0]).toHaveLength(3)
+  })
+
   it('accepts an identical existing listing without publishing inventory again', async () => {
     const listing = {
       listingId: 'integration-sale',
