@@ -6,7 +6,7 @@ AI (Codex) assisted this repository. The user provided strict oversight and judg
 
 Conversation transcript (for transparency):
 
-1. Preparation
+1. Preparation: https://chatgpt.com/share/6ab679b5-acf0-83ec-a288-f817948bcfb2
 2. Increment 0: https://chatgpt.com/s/cx_6ab66c312e248191bd32e6ef36252e2b
 3. Increment 1: https://chatgpt.com/s/cx_6ab66c5517dc81919b4c945b11b709fd
 4. Increment 2: https://chatgpt.com/s/cx_6ab66c7e4b348191ac0febe8596caaa0
