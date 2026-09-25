@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Bookipi local REST checkout API, Lambdas, and SQS queue.
+
+Parameters:
+  BetterAuthSecret:
+    Type: String
+    NoEcho: true
+
+Resources:
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: bookipi-order-events-dead-letter
+      MessageRetentionPeriod: 1209600
+
+  OrderEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: bookipi-order-events
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 345600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  CheckoutProcessorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/bookipi-checkout-processor
+      RetentionInDays: 1
+
+  CheckoutProcessorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: bookipi-checkout-processor-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteLambdaLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/bookipi-checkout-processor:log-stream:*
+        - PolicyName: WriteOrderEvents
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt OrderEventsQueue.Arn
+
+  CheckoutProcessor:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: bookipi-checkout-processor
+      Runtime: nodejs24.x
+      Handler: dist/local-handler.handler
+      Role: !GetAtt CheckoutProcessorRole.Arn
+      Timeout: 20
+      Code:
+        S3Bucket: bookipi-local-artifacts
+        S3Key: checkout-processor.zip
+      Environment:
+        Variables:
+          VALKEY_URL: redis://valkey:6379
+          ORDER_EVENTS_QUEUE_URL: http://localstack:4566/000000000000/bookipi-order-events
+          STOREFRONT_ORIGIN: http://bookipi.localhost:3200
+          BETTER_AUTH_URL: http://bookipi.localhost:3200
+          BETTER_AUTH_SECRET: !Ref BetterAuthSecret
+
+  CheckoutApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: bookipi-checkout
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Tags:
+        - Key: _custom_id_
+          Value: bookipi-checkout
+
+  ApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref CheckoutApi
+      ParentId: !GetAtt CheckoutApi.RootResourceId
+      PathPart: api
+
+  CheckoutResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref CheckoutApi
+      ParentId: !Ref ApiResource
+      PathPart: checkout
+
+  AllowApiGatewayCheckoutInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CheckoutProcessor
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${CheckoutApi}/*/POST/api/checkout
+
+  CheckoutPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref CheckoutApi
+      ResourceId: !Ref CheckoutResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CheckoutProcessor.Arn}/invocations
+
+  CheckoutDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: CheckoutPostMethod
+    Properties:
+      RestApiId: !Ref CheckoutApi
+      StageName: local
+
+Outputs:
+  CheckoutApiId:
+    Value: !Ref CheckoutApi
+  CheckoutEndpoint:
+    Value: http://bookipi-checkout.execute-api.localhost.localstack.cloud:4566/local/api/checkout
+  OrderEventsQueueUrl:
+    Value: http://localstack:4566/000000000000/bookipi-order-events

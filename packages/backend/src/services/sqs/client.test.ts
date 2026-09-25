@@ -6,6 +6,7 @@ import {
 import { describe, expect, it, vi } from 'vitest'
 import {
   acknowledgeSqsMessage,
+  createSqsClient,
   parseOrderReservedEvent,
   receiveSqsMessages,
 } from '#services/sqs/client'
@@ -19,6 +20,19 @@ const event = {
 }
 
 describe('SQS service', () => {
+  it('uses the configured endpoint for local SQS', async () => {
+    const client = createSqsClient('us-east-1', 'http://localstack:4566')
+
+    const endpointProvider = client.config.endpoint
+    expect(endpointProvider).toBeDefined()
+    if (!endpointProvider) throw new Error('SQS endpoint is not configured')
+    expect(await endpointProvider()).toMatchObject({
+      hostname: 'localstack',
+      port: 4566,
+    })
+    client.destroy()
+  })
+
   it('long-polls a bounded batch of messages', async () => {
     const send = vi.fn(async (_command: ReceiveMessageCommand) => ({
       Messages: [{ Body: JSON.stringify(event), ReceiptHandle: 'receipt-1' }],

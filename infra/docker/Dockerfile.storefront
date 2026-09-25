@@ -1,0 +1,22 @@
+FROM node:24-alpine AS build
+
+WORKDIR /workspace
+RUN corepack enable
+COPY . .
+RUN pnpm install --frozen-lockfile
+RUN pnpm generate:api
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_LISTING_ID
+ARG NEXT_PUBLIC_CHECKOUT_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_LISTING_ID=$NEXT_PUBLIC_LISTING_ID
+ENV NEXT_PUBLIC_CHECKOUT_URL=$NEXT_PUBLIC_CHECKOUT_URL
+RUN pnpm --filter @bookipi/storefront build
+
+FROM node:24-alpine
+WORKDIR /app
+COPY --from=build /workspace/packages/storefront/out ./out
+COPY scripts/serve-storefront.mjs ./serve-storefront.mjs
+ENV PORT=3000
+EXPOSE 3000
+CMD ["node", "serve-storefront.mjs"]

@@ -2,13 +2,43 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { CheckoutResult } from '../checkout/feature.js'
 import { responseHeaders } from './constants.js'
 
+export function eventHeader(
+  event: APIGatewayProxyEvent,
+  name: string,
+): string | undefined {
+  const header = Object.entries(event.headers ?? {}).find(
+    ([key]) => key.toLowerCase() === name.toLowerCase(),
+  )
+  return header?.[1]
+}
+
+export function authHeader(event: APIGatewayProxyEvent): Headers {
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(event.headers ?? {})) {
+    if (typeof value === 'string') headers.append(name, value)
+  }
+
+  return headers
+}
+
+export function isExactHttpOrigin(value: string | undefined): value is string {
+  if (!value) return false
+  try {
+    const parsed = new URL(value)
+    return (
+      ['http:', 'https:'].includes(parsed.protocol) && parsed.origin === value
+    )
+  } catch {
+    return false
+  }
+}
+
 export function approvedRequestOrigin(event: APIGatewayProxyEvent) {
   const configuredOrigin = process.env.STOREFRONT_ORIGIN
-  if (!configuredOrigin) return undefined
-  const header = Object.entries(event.headers ?? {}).find(
-    ([name]) => name.toLowerCase() === 'origin',
-  )
-  if (!header || header[1] !== configuredOrigin) return undefined
+  if (!isExactHttpOrigin(configuredOrigin)) return undefined
+  const origin = eventHeader(event, 'origin')
+  if (!isExactHttpOrigin(origin) || origin !== configuredOrigin)
+    return undefined
   return configuredOrigin
 }
 

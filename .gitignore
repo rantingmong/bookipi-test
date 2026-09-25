@@ -9,6 +9,8 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+.localstack
+.artifacts/
 # Generated API bundles, schemas, routers, handler bindings, and clients
 packages/backend/src/api/**/generated/
 packages/backend/src/api/.generated/

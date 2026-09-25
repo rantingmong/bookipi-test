@@ -1,4 +1,7 @@
-import { readListingSeedEnvConfig } from '#features/env/feature'
+import {
+  readListingSeedEnvConfig,
+  readListingSeedOverrides,
+} from '#features/env/feature'
 import { createListingModels } from '#features/listing/models'
 import { createOrderModel } from '#features/order/models'
 import { seedListingData } from '#features/seed/feature'
@@ -8,6 +11,7 @@ import type { Models } from '#types'
 
 async function runSeed() {
   const config = readListingSeedEnvConfig()
+  const seedOverrides = readListingSeedOverrides()
   const mongo = createMongoService(config.mongoUri, config.mongoDatabase)
   const valkey = createValkeyService(config.valkeyUrl)
 
@@ -22,11 +26,14 @@ async function runSeed() {
       models.ListingSlotModel.init(),
       models.OrdersModel.init(),
     ])
-    await seedListingData({
-      ...models,
-      mongoConnection: mongo.connection,
-      valkeyConnection: valkey.client,
-    })
+    await seedListingData(
+      {
+        ...models,
+        mongoConnection: mongo.connection,
+        valkeyConnection: valkey.client,
+      },
+      seedOverrides,
+    )
     process.stdout.write('Seeded listing, slots, and Valkey inventory.\n')
   } finally {
     await Promise.allSettled([mongo.close(), valkey.client.quit()])

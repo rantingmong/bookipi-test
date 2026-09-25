@@ -1,0 +1,37 @@
+name: rest-request-authorizer-prototype
+
+services:
+  localstack:
+    image: localstack/localstack:2026.8.4
+    environment:
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?Set LOCALSTACK_AUTH_TOKEN from .localstack}
+      SERVICES: apigateway,cloudformation,iam,lambda,logs
+      LAMBDA_DOCKER_NETWORK: rest-request-authorizer-prototype
+      LAMBDA_DOCKER_FLAGS: -v /var/run/docker.sock:/var/run/docker.sock
+      AWS_DEFAULT_REGION: ap-southeast-1
+    ports:
+      - '14566:4566'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./template.yaml:/prototype/template.yaml:ro
+      - ./direct-event.json:/prototype/direct-event.json:ro
+      - ./direct-deny-event.json:/prototype/direct-deny-event.json:ro
+    networks:
+      rest-request-authorizer-prototype:
+        aliases:
+          - rest-request-authz-proof.execute-api.localhost.localstack.cloud
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bash',
+          '-c',
+          'curl -fsS http://localhost:4566/_localstack/health >/dev/null',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+networks:
+  rest-request-authorizer-prototype:
+    name: rest-request-authorizer-prototype

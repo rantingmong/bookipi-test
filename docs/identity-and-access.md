@@ -48,7 +48,9 @@ The storefront maps an explicit checkout `401` or `UNAUTHENTICATED` response to 
 
 The storefront sends email/password requests to Express at `/api/auth/*`. Express passes each raw request to Better Auth before JSON parsing. Better Auth stores users and credentials in MongoDB. It stores sessions in Valkey secondary storage with the `bookipi:auth:` prefix. The sign-up page submits a name, email, and password. Better Auth uses its default password policy and auto-signs in after successful sign-up. The login page submits an email and password. Both pages can read the current session and sign out.
 
-The REST API REQUEST Lambda authorizer in `packages/checkout-authorizer` checks `Origin` first. It rejects a missing or unapproved origin before it parses runtime settings or creates its lazy Valkey runtime. A missing cookie also denies without a connection. After these checks, it checks the opaque Better Auth cookie with the same Better Auth secret. It reads the session from Valkey secondary storage and applies Better Auth cookie integrity and expiry rules. It passes only the active `customerId` to checkout. Checkout does not use the stored role snapshot.
+The production REST API REQUEST Lambda authorizer in `packages/checkout-authorizer` checks `Origin` first. It rejects a missing or unapproved origin before it parses runtime settings or creates its lazy Valkey runtime. A missing cookie also denies without a connection. After these checks, it checks the opaque Better Auth cookie with the same Better Auth secret. It reads the session from Valkey secondary storage and applies Better Auth cookie integrity and expiry rules. It passes only the active `customerId` to checkout. Checkout does not use the stored role snapshot.
+
+The isolated LocalStack `2026.8.4` Hobby [prototype](../infra/localstack/prototypes/rest-request-authorizer/) did not invoke or enforce the configured REQUEST authorizer. The local template uses `AuthorizationType: NONE` and a combined adapter in the checkout processor Lambda. That adapter checks the same Origin and Better Auth session before it calls checkout behavior. It discards incoming authorizer context and customer identity headers. This is a local workaround. It is not the production design and does not prove AWS behavior.
 
 Better Auth uses MongoDB for users, accounts, and credentials. It uses Valkey secondary storage for sessions. Keep `session.storeSessionInDatabase` unset or `false`. Better Auth must not fall back to MongoDB when a session is absent from Valkey. A missing or expired Valkey session requires a new login.
 
@@ -60,7 +62,7 @@ If the storefront and checkout origins differ, configure credentialed CORS. Retu
 
 API Gateway rejects a Deny policy before it invokes the checkout Lambda. For a cross-origin deployment, configure an API Gateway `GatewayResponse` for authorizer denials. It must return the exact allowed `Origin` and `Access-Control-Allow-Credentials: true`. No deployment configuration or proof exists in this repository.
 
-The authorizer is a separate Lambda handler. It has no MongoDB or Express dependency. API Gateway invokes the checkout Lambda only after the authorizer returns the verified identity. Its environment requires `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `STOREFRONT_ORIGIN`, and `VALKEY_URL`.
+The production authorizer is a separate Lambda handler. It has no MongoDB or Express dependency. API Gateway invokes the checkout Lambda only after the authorizer returns the verified identity. Its environment requires `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `STOREFRONT_ORIGIN`, and `VALKEY_URL`. The local combined adapter uses the same settings inside the checkout processor package.
 
 ## Decisions & assumptions
 

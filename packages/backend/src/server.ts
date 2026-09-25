@@ -20,7 +20,10 @@ async function prepare() {
   const workerConfig = readOrderWorkerEnvConfig()
 
   const mongo = createMongoService(config.mongoUri, config.mongoDatabase)
-  const sqs = createSqsClient(workerConfig.awsRegion)
+  const sqs = createSqsClient(
+    workerConfig.awsRegion,
+    workerConfig.sqsEndpointUrl,
+  )
   const valkey = createValkeyService(config.valkeyUrl)
   const worker = createWorkerFeature(sqs, workerConfig.sqsQueueUrl)
 

@@ -22,8 +22,8 @@ Update the affected README and design document when a decision changes.
 - Increment 3 implements listing publication and inventory methods. Sale routes remain planned.
 - Increment 4 implementation, local verification, and internal reviews are complete. Integration and deployment evidence remain pending.
 - Increment 5 implementation and local verification are complete. AWS SQS and MongoDB integration evidence remain pending.
-- The selected stack remains pnpm, TypeScript, Express, Next.js static export, CloudFront, API Gateway, Lambda, MongoDB, Valkey, and LocalStack.
-- API Gateway REST API uses `packages/checkout-authorizer` for its separate REQUEST Lambda authorizer. It checks Better Auth sessions in Valkey.
+- The deployed stack uses CloudFront, API Gateway, Lambda, MongoDB, and Valkey. The local test stack uses Caddy as a same-origin edge and LocalStack for API Gateway, Lambda, and SQS.
+- The production API Gateway REST API uses `packages/checkout-authorizer` for its separate REQUEST Lambda authorizer. It checks Better Auth sessions in Valkey. The LocalStack Hobby template uses a local-only combined adapter because its isolated `2026.8.4` prototype did not invoke or enforce a REQUEST authorizer.
 - Each future feature needs a user review before implementation if its angles change behavior or system boundaries.
 - Increment 1 provides the first runtime bootstrap. Increment 2 adds authentication and the durable listing/order model foundation. Increment 3 adds listing publication and inventory methods. Sale routes remain planned.
 
@@ -69,7 +69,7 @@ Selection recorded by this design: Angle A with Valkey secondary storage for ses
 
 Reason: one backend boundary reduces coordination for the small take-home while keeping the hot path in Lambda.
 
-Authentication verification: focused tests cover required settings, storage selection, no MongoDB session fallback, session identity mapping, raw Express request ordering, and credentialed browser requests. Model tests cover listing validation, transactional slot creation and growth, and order indexes. Increment 3 changes the demo seed to call `createListing`; it is one-shot. MongoDB integration, cookie expiry, revocation, sale reads, and deployment authorizer checks remain pending. The separate authorizer makes no Express or MongoDB request.
+Authentication verification: focused tests cover required settings, storage selection, no MongoDB session fallback, session identity mapping, raw Express request ordering, and credentialed browser requests. Model tests cover listing validation, transactional slot creation and growth, and order indexes. Increment 3 changes the demo seed to call `createListing`; identical facts and state succeed idempotently, while conflicting facts or inconsistent existing state fail closed. MongoDB integration, cookie expiry, revocation, sale reads, and deployment authorizer checks remain pending. The separate authorizer makes no Express or MongoDB request.
 
 Listing setup stores listing identity, display name, sale window, and `reserveSlots`. It accepts a positive integer `initialSlotCount` as an operation parameter and requires `initialSlotCount >= reserveSlots`. It stores no stock count. Derive `stockTotal` by counting slot documents and `publicStock = stockTotal - reserveSlots`.
 
@@ -155,9 +155,9 @@ Local verification covers duplicate SQS events, status transitions, cancellation
 
 ## Increment 8: storefront purchase experience
 
-Status: implemented. Unit and controlled browser checks cover local request behavior. CloudFront, API Gateway, deployed authorizer, and credentialed preflight checks remain pending.
+Status: implemented. The local integration suite checks storefront delivery, backend health, sign-up, session cookies, API Gateway checkout, the local combined authentication adapter, SQS persistence, and owner payment. The [REQUEST-authorizer prototype](../infra/localstack/prototypes/rest-request-authorizer/) records that LocalStack `2026.8.4` Hobby did not invoke or enforce the configured authorizer. Deployed CloudFront and AWS checks remain pending.
 
-Angle A: let the browser call the configured CloudFront checkout endpoint directly. CloudFront routes to API Gateway REST API, whose REQUEST Lambda authorizer checks the Better Auth session in Valkey before checkout Lambda runs.
+Angle A: let the browser call the configured deployed CloudFront checkout endpoint directly. CloudFront routes to API Gateway REST API, whose REQUEST Lambda authorizer checks the Better Auth session in Valkey before checkout Lambda runs.
 
 Angle B: add a Next.js backend-for-frontend route that proxies the CloudFront checkout endpoint.
 
@@ -165,9 +165,9 @@ Selection recorded by this design: Angle A.
 
 Reason: the purchase request must bypass Express. The direct path has fewer request hops and keeps the hot path in API Gateway and Lambda.
 
-Local verification: backend tests cover public listing status and durable counts. Authorizer tests cover missing and unapproved Origin rejection before runtime access, session options, and deny paths. Processor tests cover no-store and exact-origin credentialed CORS. Storefront tests cover listing reads and direct checkout request shape. A controlled Playwright test verifies session and listing display, direct request fields, cookie forwarding, same-key retry, and payment-page navigation.
+Local verification: backend tests cover public listing status and durable counts. Authorizer tests cover the production handler's missing and unapproved Origin rejection before runtime access, session options, and deny paths. Processor tests cover the local adapter's origin-first authentication, trusted identity replacement, no-store behavior, and safe failure response. Storefront tests cover listing reads and direct checkout request shape. A controlled Playwright test verifies session and listing display, direct request fields, cookie forwarding, same-key retry, and payment-page navigation.
 
-Deployment verification remains required. Check CloudFront routing, cookie and Origin forwarding, disabled checkout response caching, disabled API Gateway authorizer-result caching, the deployed authorizer against Valkey, and cookie scope. If origins differ, check credentialed CORS on success and relevant errors. Check an unauthenticated API Gateway `OPTIONS` method that does not invoke checkout. Controlled browser routes and LocalStack do not prove these behaviors.
+Deployment verification remains required. Check CloudFront routing, cookie and Origin forwarding, disabled checkout response caching, disabled API Gateway authorizer-result caching, the deployed authorizer against Valkey, and cookie scope. If origins differ, check credentialed CORS on success and relevant errors. Check an unauthenticated API Gateway `OPTIONS` method that does not invoke checkout. Local Caddy and LocalStack do not prove these behaviors.
 
 ## Increment 9: stress and resilience evidence
 
@@ -184,6 +184,22 @@ Reason: local repeatability exposes invariant failures before deployment cost.
 Planned verification: throughput, latency percentiles, error rate, failure injection, recovery time, event-order permutations, release replay, and every invariant in `docs/testing-strategy.md`.
 
 Open choice: select the live storefront wording for the case where public remaining reaches zero while the Valkey pool still has claimable slots. Checkout uses the Valkey pool as the sold-out authority.
+
+## Increment 10: local full-stack test infrastructure
+
+Status: implemented. Run the local suite to record integration evidence. Deployed AWS checks remain pending.
+
+Angle A: use Caddy as a same-origin local edge and LocalStack for REST API Gateway, Lambda, and SQS.
+
+Angle B: use LocalStack CloudFront as the local browser edge.
+
+Selection: Angle A.
+
+Reason: LocalStack Hobby supports the required API Gateway, Lambda, and SQS services. Its CloudFront support requires a higher plan. Caddy keeps auth and checkout on one browser origin.
+
+The local stack uses Compose services in `infra/compose.yml`, Lambda artifacts in `.artifacts/lambdas`, and the CloudFormation template in `infra/localstack/template.yaml`. The integration runner reads `.localstack` without printing the token, creates a per-run auth secret and sale window, and runs its checks after cleanup in a `finally` path.
+
+Local verification checks storefront delivery, backend health, sign-up and session cookies, the authorizer and checkout Lambda, SQS-to-MongoDB persistence, owner order reads, and the payment outcome. These checks do not prove CloudFront, deployed API Gateway, deployed Lambda, or production IAM behavior.
 
 ## Change log
 
@@ -211,3 +227,7 @@ Open choice: select the live storefront wording for the case where public remain
 - Corrected the Increment 2 and Increment 4 status summaries after local verification and review.
 - Implemented the Increment 5 Express SQS worker and immutable order persistence. AWS SQS and MongoDB integration evidence remain pending.
 - Implemented Increment 6 with the static mock payment page, authenticated order reads, a post-SQS relative payment redirect, and local or test payment outcomes. Browser, MongoDB, SQS, and deployment evidence remain pending.
+
+### 2026-09-25
+
+- Added the Caddy and LocalStack local full-stack test increment. Deployed CloudFront and AWS behavior remain unverified.

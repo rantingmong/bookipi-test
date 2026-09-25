@@ -4,27 +4,27 @@
 
 The checkout processor runs as an AWS Lambda function for the purchase hot path.
 
-Increment 4 adds the API Gateway REST Lambda handler, atomic Valkey reservation, and SQS publication. `src/runtime.ts` creates and reuses clients on the first valid request. LocalStack and deployment checks remain pending.
+This package provides the checkout Lambda handler, atomic Valkey reservation, and SQS publication. `src/runtime.ts` creates and reuses clients on the first valid request. The local stack deploys a packaged artifact to LocalStack API Gateway and Lambda. AWS deployment checks remain pending.
 
 ## Flow
 
-For cookie-authenticated checkout POST requests, the API Gateway REST REQUEST Lambda authorizer will reject a missing or unapproved `Origin` before it calls Better Auth or reads Valkey. Deployment configuration supplies the exact origin allowlist.
+In deployment, the separate API Gateway REST REQUEST Lambda authorizer rejects a missing or unapproved `Origin` before it calls Better Auth or reads Valkey. Deployment configuration supplies the exact origin allowlist.
 
-After `Origin` passes, the authorizer will check the Better Auth session in Valkey and return only trusted `customerId` to API Gateway. API Gateway will forward that identity with the original listing identifier and idempotency key to the checkout Lambda.
+After `Origin` passes, the deployed authorizer checks the Better Auth session in Valkey and returns only trusted `customerId` to API Gateway. API Gateway forwards that identity with the original listing identifier and idempotency key to this package's production handler.
 
-The browser will call the CloudFront checkout endpoint. Express will not invoke Lambda or proxy the purchase request.
+In deployment, the browser calls the CloudFront checkout endpoint. In the local stack, the browser calls Caddy at `http://bookipi.localhost:3200/api/checkout`. Caddy routes it to LocalStack API Gateway and a local-only adapter in `src/local-handler.ts`. The adapter checks the exact `Origin` and Better Auth session in Valkey. It then calls `startCheckout` directly with the verified `customerId`. It does not build authorizer context or call `handler.ts`. Express does not invoke Lambda or proxy the purchase request.
 
-The request sends `listingId` and `idempotencyKey` as JSON. The handler reads trusted `customerId` only from `requestContext.authorizer.customerId`. It ignores a browser `customerId`. The Lambda validates but does not generate or change the idempotency key. Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. A same-key retry returns and republishes the same binding.
+The request sends `listingId` and `idempotencyKey` as JSON. The production handler reads trusted `customerId` only from `requestContext.authorizer.customerId`. The local adapter reads it from the validated Better Auth session. Both ignore browser-supplied customer identity. The Lambda validates but does not generate or change the idempotency key. Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. A same-key retry returns and republishes the same binding.
 
-The Lambda will use `orderId` as the slot-owner identifier. MongoDB will persist order fields without the idempotency key. Duplicate SQS delivery will upsert by `orderId`.
+The Lambda uses `orderId` as the slot-owner identifier. MongoDB persists order fields without the idempotency key. Duplicate SQS delivery upserts by `orderId`.
 
 The Lambda atomically checks publication, sale time, idempotency, and one active order per customer and listing in Valkey. It then pops one slot from the shared pool. The pool contains every durable listing-slot document. MongoDB derives the total and public counts from those documents. The listing-scoped `idempotency`, `active-customers`, and `orders` hashes store tuple, owner, and order data. Every script receives its Redis keys through `KEYS`. Guarded cancellation release clears the matching active-customer hash field.
 
-The same Valkey operation will create the reservation and idempotency binding.
+The same Valkey operation creates the reservation and idempotency binding.
 
 The Lambda publishes `order-reserved.v1` to a Standard SQS queue. The event contains `eventType`, `orderId`, `customerId`, `listingId`, and `slotId`.
 
-SQS will be the only Lambda-to-Express bridge. The Express worker will persist the binding in MongoDB.
+SQS is the only Lambda-to-Express bridge. The Express worker persists the binding in MongoDB.
 
 The Lambda returns HTTP 202 with `orderId`, `PENDING`, and a relative `redirectUrl` only after SQS accepts the event. The payment feature creates that redirect from the same UUID order ID. It has no provider, persistent session, network call, or new environment setting. It returns stable JSON errors for invalid input, missing identity, unavailable inventory, and retryable service errors. An SQS failure leaves the Valkey claim in place. A same-key retry attempts publication again and can create the same redirect.
 
@@ -33,15 +33,15 @@ Every response sets `Cache-Control: no-store`. When `STOREFRONT_ORIGIN` is set a
 ## Decisions & assumptions
 
 - Lambda owns hot-path Valkey reservation and SQS publication.
-- API Gateway supplies trusted identity. Lambda ignores browser-supplied `customerId` values.
-- Runtime settings are `VALKEY_URL` and `ORDER_EVENTS_QUEUE_URL`. The runtime reads them and creates clients on the first valid checkout request. Imports do not read settings or connect services.
-- Set optional `STOREFRONT_ORIGIN` when the browser uses another origin. It must match the authorizer allowlist and backend origin configuration.
+- In deployment, API Gateway supplies trusted identity. The local adapter checks the Better Auth session and creates trusted identity in-process. The handler ignores browser-supplied `customerId` values.
+- The production handler uses `VALKEY_URL` and `ORDER_EVENTS_QUEUE_URL`. The local adapter also uses `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, and exact `STOREFRONT_ORIGIN`. It reads settings and creates clients only during an invocation. Imports do not read settings or connect services.
+- Set `STOREFRONT_ORIGIN` for the local adapter. It must be one exact HTTP or HTTPS origin. Production deployment must match the authorizer allowlist and backend origin configuration.
 - `src/types.ts` defines the shared checkout and runtime dependency contracts. Request and result types stay with the checkout feature.
 - `src/features/payment` creates a validated relative mock payment redirect. Checkout calls it after reservation publication succeeds.
 - Listing IDs use 1 to 128 ASCII letters, digits, underscores, or hyphens. The first character is a letter or digit so it cannot change the Valkey hash tag.
-- The authorizer and checkout Lambda both need access to Valkey. Auth and inventory use separate key namespaces.
+- The local combined Lambda checks sessions and claims inventory through separate Valkey key namespaces.
 - A Valkey outage denies auth and stops reservation. Do not fall back to MongoDB for session checks.
-- CORS and cookie `SameSite` settings do not replace the authorizer's required Origin check.
+- CORS and cookie `SameSite` settings do not replace the Origin check in either path.
 - The initial quantity is exactly one.
 - `reserveSlots` reduces the advertised count derived from slot documents. At most as many orders can reach `COMPLETE` as there are slot documents.
 - The Lambda can claim any slot in the one Valkey pool. The atomic pop, not the reserve count, prevents two requests from claiming one slot.
@@ -56,7 +56,9 @@ Every response sets `Cache-Control: no-store`. When `STOREFRONT_ORIGIN` is set a
 
 ## Gotchas
 
-This package has a REST Lambda handler, checkout and inventory features, lazy Valkey and SQS clients, no-store responses, conditional credentialed CORS, tests, type checks, and a build. It has no deployment file or local URL.
+The local template uses `AuthorizationType: NONE` because the isolated LocalStack `2026.8.4` Hobby prototype did not invoke or enforce a REST REQUEST authorizer. The [prototype](../../infra/localstack/prototypes/rest-request-authorizer/) is reproducible evidence. This combined adapter is a local workaround. It is not the production architecture and does not prove AWS behavior. Keep `src/handler.ts` for the production REQUEST-authorizer context.
+
+This package has production and local Lambda entry points, checkout and inventory features, lazy Valkey and SQS clients, no-store responses, conditional credentialed CORS, tests, type checks, and a build. The local deployment template is in `infra/localstack/template.yaml`.
 
 The Express SQS worker consumes the LocalStack queue. This design has no SQS-to-Lambda event source mapping.
 

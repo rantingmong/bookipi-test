@@ -1,0 +1,158 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Isolated LocalStack REST REQUEST authorizer behavior proof.
+
+Resources:
+  AuthorizerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/rest-request-authz-proof-authorizer
+      RetentionInDays: 1
+
+  BackendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/rest-request-authz-proof-backend
+      RetentionInDays: 1
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: rest-request-authz-proof-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WritePrototypeLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:ap-southeast-1:000000000000:log-group:/aws/lambda/rest-request-authz-proof-*:log-stream:*
+
+  AuthorizerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: rest-request-authz-proof-authorizer
+      Runtime: nodejs24.x
+      Handler: index.handler
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 15
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('REST_REQUEST_AUTHORIZER_INVOKED')
+            let token = ''
+            for (const [name, value] of Object.entries(event.headers || {})) {
+              if (name.toLowerCase() === 'x-prototype-token' && typeof value === 'string') token = value
+            }
+            let effect = 'Deny'
+            if (token === 'allow-probe') effect = 'Allow'
+            console.log(`REST_REQUEST_AUTHORIZER_DECISION_${effect}`)
+            return {
+              principalId: 'prototype',
+              policyDocument: {
+                Version: '2012-10-17',
+                Statement: [{ Action: 'execute-api:Invoke', Effect: effect, Resource: event.methodArn }],
+              },
+              context: { proof: 'rest-request-authorizer' },
+            }
+          }
+
+  BackendFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: rest-request-authz-proof-backend
+      Runtime: nodejs24.x
+      Handler: index.handler
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 15
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('REST_REQUEST_BACKEND_INVOKED')
+            return {
+              statusCode: 200,
+              headers: { 'cache-control': 'no-store', 'content-type': 'application/json' },
+              body: JSON.stringify({
+                backend: 'invoked',
+                authorizerContext: event.requestContext && event.requestContext.authorizer,
+              }),
+            }
+          }
+
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: rest-request-authz-proof
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Tags:
+        - Key: _custom_id_
+          Value: rest-request-authz-proof
+
+  ProbeResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: probe
+
+  RequestAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: rest-request-authz-proof-authorizer
+      RestApiId: !Ref RestApi
+      Type: REQUEST
+      IdentitySource: method.request.header.x-prototype-token
+      AuthorizerResultTtlInSeconds: 0
+      AuthorizerUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthorizerFunction.Arn}/invocations
+
+  AllowGatewayToInvokeAuthorizer:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AuthorizerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/authorizers/${RequestAuthorizer}
+
+  AllowGatewayToInvokeBackend:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref BackendFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/GET/probe
+
+  ProbeMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref ProbeResource
+      HttpMethod: GET
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref RequestAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: ProbeMethod
+    Properties:
+      RestApiId: !Ref RestApi
+      StageName: local
+
+Outputs:
+  ApiId:
+    Value: !Ref RestApi
+  AuthorizerId:
+    Value: !Ref RequestAuthorizer

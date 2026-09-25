@@ -16,7 +16,7 @@ The `/payment?orderId=...` page reads the order with the generated client wrappe
 
 Run `pnpm generate:api` from the repository root to update the ignored browser client. Keep tracked feature wrappers under `src/lib/features`.
 
-Run `pnpm --filter @bookipi/storefront test:e2e` for controlled Playwright checkout tests. They check request fields, cookie forwarding, explicit unauthenticated responses, opaque-failure session revalidation, active-session retry, idempotency-key reuse, and payment navigation. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to use an installed Chromium-based browser. These tests check storefront behavior only. They do not prove CloudFront or deployed authorizer behavior.
+Run `pnpm --filter @bookipi/storefront test:e2e` for controlled Playwright checkout tests. They check request fields, cookie forwarding, explicit unauthenticated responses, opaque-failure session revalidation, active-session retry, idempotency-key reuse, and payment navigation. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to use an installed Chromium-based browser. The full local integration suite uses Caddy as one same-origin edge. Neither test proves deployed CloudFront or authorizer behavior.
 
 Keep page UI in `src/app/<page>/page.tsx` and its state hook in `page.state.tsx`. Put page-specific components in `parts`, shared hooks in `src/hooks`, generated client code in `src/lib/api/generated`, tracked client wrappers and shared feature state in `src/lib/features`, and shared UI components in `src/ui`. Create these directories when their first file is needed.
 
@@ -26,11 +26,11 @@ Next.js will read sale status and purchase results from the Express backend.
 
 The customer can sign up and sign in through the Better Auth client. Auth requests use `NEXT_PUBLIC_API_BASE_URL` and include browser credentials.
 
-The browser will send one purchase attempt with a client-generated idempotency key directly to the configured CloudFront checkout endpoint. Serve auth and checkout under the same host, or keep the checkout hostname within the Better Auth cookie scope. If the storefront and checkout origins differ, the request will use `credentials: 'include'`.
+The browser sends one purchase attempt with a client-generated idempotency key to the configured checkout URL. The local URL is `http://bookipi.localhost:3200/api/checkout`. Caddy serves auth, API reads, and checkout under the same host.
 
 The client sends the key only. The checkout service scopes it to the listing and authorizer-derived customer identity. The browser also sends its `Origin` header for the authorizer's trusted-origin check.
 
-CloudFront will route the request through API Gateway to the checkout Lambda. Express will not proxy the purchase request.
+In deployment, CloudFront routes the request through API Gateway to the checkout Lambda. In local tests, Caddy routes it to LocalStack API Gateway. Express does not proxy the purchase request.
 
 The storefront shows accepted, retryable, unauthenticated, sold-out, and completed purchase states. It shows sign-in guidance for an explicit unauthenticated response. After an opaque checkout failure or a readable `403` without a checkout error code, it revalidates the Better Auth session. An absent session shows sign-in guidance. An active session keeps the request retryable. Explicit checkout errors do not trigger session revalidation. A retry reuses the same idempotency key.
 
@@ -67,7 +67,7 @@ Do not treat a client response as durable order proof until the backend reports 
 
 The browser cannot self-assert payment success in a real deployment.
 
-For cross-origin deployments, API Gateway must return the exact allowed `Origin` and `Access-Control-Allow-Credentials: true` in a `GatewayResponse` for authorizer denials. This repository contains no deployment configuration or proof for this behavior.
+For cross-origin deployments, API Gateway must return the exact allowed `Origin` and `Access-Control-Allow-Credentials: true` in a `GatewayResponse` for authorizer denials. Local tests use one origin. They do not prove deployed CloudFront or API Gateway behavior.
 
 ## Design links
 
