@@ -1,0 +1,62 @@
+openapi: 3.1.0
+info:
+  title: Read public listing status
+  version: 1.0.0
+paths:
+  /listings/{listingId}:
+    get:
+      operationId: getListingStatus
+      summary: Read public sale details and slot counts
+      parameters:
+        - name: listingId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_-]*$'
+      responses:
+        '200':
+          description: Public listing status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingStatus'
+        '404':
+          description: Listing does not exist
+components:
+  schemas:
+    ListingStatus:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          listingId,
+          productName,
+          saleStartsAt,
+          saleEndsAt,
+          stockTotal,
+          reserveSlots,
+          publicStock,
+        ]
+      properties:
+        listingId:
+          type: string
+        productName:
+          type: string
+        saleStartsAt:
+          type: string
+          format: date-time
+        saleEndsAt:
+          type: string
+          format: date-time
+        stockTotal:
+          type: integer
+          minimum: 0
+        reserveSlots:
+          type: integer
+          minimum: 0
+        publicStock:
+          type: integer
+          minimum: 0

@@ -2,13 +2,30 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { CheckoutResult } from '../checkout/feature.js'
 import { responseHeaders } from './constants.js'
 
+export function approvedRequestOrigin(event: APIGatewayProxyEvent) {
+  const configuredOrigin = process.env.STOREFRONT_ORIGIN
+  if (!configuredOrigin) return undefined
+  const header = Object.entries(event.headers ?? {}).find(
+    ([name]) => name.toLowerCase() === 'origin',
+  )
+  if (!header || header[1] !== configuredOrigin) return undefined
+  return configuredOrigin
+}
+
 export function response(
   statusCode: number,
   body: unknown,
+  origin?: string,
 ): APIGatewayProxyResult {
+  const headers: Record<string, string> = { ...responseHeaders }
+  if (origin) {
+    headers['access-control-allow-origin'] = origin
+    headers['access-control-allow-credentials'] = 'true'
+    headers.vary = 'Origin'
+  }
   return {
     statusCode,
-    headers: responseHeaders,
+    headers,
     body: JSON.stringify(body),
   }
 }
@@ -22,18 +39,21 @@ export function requestBody(event: APIGatewayProxyEvent): unknown {
 
 export function checkoutResponse(
   result: CheckoutResult,
+  origin?: string,
 ): APIGatewayProxyResult {
-  if (result.status === 'PENDING') return response(202, result)
+  if (result.status === 'PENDING') return response(202, result, origin)
   if (result.status === 'unpublished') {
-    return response(409, { error: 'LISTING_UNPUBLISHED' })
+    return response(409, { error: 'LISTING_UNPUBLISHED' }, origin)
   }
-  if (result.status === 'closed') return response(409, { error: 'SALE_CLOSED' })
-  if (result.status === 'sold-out') return response(409, { error: 'SOLD_OUT' })
+  if (result.status === 'closed')
+    return response(409, { error: 'SALE_CLOSED' }, origin)
+  if (result.status === 'sold-out')
+    return response(409, { error: 'SOLD_OUT' }, origin)
   if (result.status === 'already-active') {
-    return response(409, { error: 'ACTIVE_ORDER_EXISTS' })
+    return response(409, { error: 'ACTIVE_ORDER_EXISTS' }, origin)
   }
   if (result.status === 'cancelled') {
-    return response(409, { error: 'RESERVATION_CANCELLED' })
+    return response(409, { error: 'RESERVATION_CANCELLED' }, origin)
   }
-  return response(503, { error: 'CHECKOUT_RETRYABLE' })
+  return response(503, { error: 'CHECKOUT_RETRYABLE' }, origin)
 }

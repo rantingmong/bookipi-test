@@ -18,6 +18,7 @@ Current tests cover:
 - Public count examples: 15 slots with 5 reserved gives 10; 10 slots with 2 reserved gives 8.
 - Transactional listing creation and exactly one deterministic slot per initial slot.
 - Total and public counts derived from `listing-slots` documents.
+- Public listing-status response fields, durable slot-derived counts, and unknown-listing behavior.
 - Transactional slot growth, sequential IDs, count updates, and positive integer validation.
 - Listing and slot collection names and required indexes.
 - Required order fields, statuses, unique order ID, and active customer/listing and listing/slot indexes.
@@ -28,9 +29,12 @@ Current tests cover:
 - Checkout request validation, authorizer identity handling, stable REST error responses, same-key republishing, retryable SQS failures, and the exact `order-reserved.v1` message shape.
 - Payment session UUID validation, relative redirect construction, post-publication checkout ordering, redirect response mapping, and same-key redirect recreation.
 - Checkout processor environment validation and lazy runtime client creation.
+- Checkout authorizer exact-origin rejection before runtime access, cookie gating, Better Auth refresh/cache options, trusted customer context, and Deny behavior for missing sessions or Valkey errors.
+- Checkout response `Cache-Control: no-store` headers and exact-origin credentialed CORS on accepted and error responses.
+- Storefront listing reads, direct checkout request fields, credentials, unauthenticated responses, opaque-failure and ambiguous-403 session revalidation, stable error preservation, retry state, idempotency-key reuse, and endpoint URL normalization.
 - Atomic inventory claim script boundaries, tuple-scoped key selection, sale window outcomes, active-order rejection, and cancellation outcomes.
 - Order worker environment validation, SQS long-poll settings, strict event validation, acknowledgement command, reservation upsert replay, timestamp and terminal-status preservation, and conflicting-fact rejection.
-- Payment outcome validation, atomic `PENDING` transitions, same-terminal-status retry (including `failure` followed by `expired`), conflicting terminal rejection, local or test environment gating, owner checks, expiry handling, and order reads.
+- Payment outcome validation, atomic `PENDING` transitions, same-terminal-status retry (including `failure` followed by `expired`), conflicting terminal rejection, route availability when order routes are configured, owner checks, expiry handling, and order reads.
 - Durable cancellation release state, guarded Valkey marker replay, trigger-driven reconciliation after SQS and payment outcomes, and completion only after Valkey success.
 
 These tests do not prove MongoDB or Valkey integration.
@@ -53,11 +57,11 @@ LocalStack tests will cover SQS delivery, duplicate messages, retry behavior, an
 
 ## Browser tests with Playwright
 
-Playwright will verify sign-up, sign-in, session display, listing display, one purchase, same-key retry, sold-out response, and purchase result reads.
+The controlled Playwright tests verify session display, public listing display, direct checkout request fields, credentialed cookie forwarding, sign-in guidance after an explicit unauthenticated response, expired-session revalidation after a readable API Gateway denial, active-session retry after a readable denial, same-key reuse, and navigation to the payment result. They use controlled route responses. They do not prove real sign-in, session authorization, CloudFront, API Gateway, or Valkey behavior.
 
 The `/payment?orderId=...` page polls until the SQS worker persists the order. It shows outcome controls only after the authenticated API confirms ownership. Browser tests will verify pending, owner-not-found, request error, success, and cancellation states. Provider callback correlation remains planned work.
 
-Deployment checks will verify CloudFront routing, session-cookie forwarding, `Origin` forwarding, authorizer-result caching, and checkout response caching. Cross-origin deployments will verify credentialed CORS and unauthenticated preflight behavior.
+Deployment checks must verify CloudFront routing, session-cookie forwarding, `Origin` forwarding, disabled authorizer-result caching, and disabled checkout response caching. Cross-origin deployments must verify credentialed CORS on success and relevant errors, an unauthenticated `OPTIONS` response, and an authorizer-denial API Gateway `GatewayResponse` with the exact allowed Origin and `Access-Control-Allow-Credentials: true`. LocalStack and controlled browser routes do not prove these settings. No deployment configuration or proof exists in this repository.
 
 ## Stress tests with k6
 
@@ -107,3 +111,5 @@ Increment 4 and 5 unit tests do not prove atomic Valkey behavior, SQS delivery, 
 - Added payment-session redirect and post-SQS checkout tests. Browser and service integration checks remain pending.
 - Added durable release intent, idempotent Valkey marker, and trigger-driven reconciliation checks. MongoDB and Valkey integration checks remain pending.
 - Added guarded-release failure retry and `failure`/`expired` same-status retry checks.
+- Added public listing status, origin-first authorizer, no-store and conditional CORS, and storefront checkout client tests.
+- Added a controlled Playwright checkout retry test. Deployment integration remains pending.

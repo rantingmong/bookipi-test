@@ -1,7 +1,23 @@
 import { createApp, app as defaultApp } from '#app'
 import { readEnvConfig } from '#features/env/feature'
+import type { Models } from '#types'
 import type { RequestHandler } from 'express'
 import { describe, expect, it, vi } from 'vitest'
+
+function createModels(
+  overrides: {
+    ListingModel?: object
+    ListingSlotModel?: object
+    OrdersModel?: object
+  } = {},
+): Models {
+  return {
+    ListingModel: {},
+    ListingSlotModel: {},
+    OrdersModel: {},
+    ...overrides,
+  } as unknown as Models
+}
 
 describe('createApp', () => {
   it('passes the raw auth request stream before JSON parsing', async () => {
@@ -135,7 +151,9 @@ describe('createApp', () => {
       return null
     }
     const app = createApp({
-      ordersModel: { findOne, findOneAndUpdate: async () => null } as never,
+      models: createModels({
+        OrdersModel: { findOne, findOneAndUpdate: async () => null },
+      }),
       resolveSession: async () => ({ customerId: 'customer-001' }),
       valkey: { eval: vi.fn() } as never,
     })
@@ -162,7 +180,9 @@ describe('createApp', () => {
       expect(await absentResponse.json()).toEqual({ error: 'Not found' })
 
       const anonymousApp = createApp({
-        ordersModel: { findOne, findOneAndUpdate: async () => null } as never,
+        models: createModels({
+          OrdersModel: { findOne, findOneAndUpdate: async () => null },
+        }),
         resolveSession: async () => undefined,
         valkey: { eval: vi.fn() } as never,
       })
@@ -190,7 +210,7 @@ describe('createApp', () => {
     }
   })
 
-  it('hides mock outcomes when disabled and applies an enabled outcome', async () => {
+  it('applies mock outcomes when order routes are configured', async () => {
     let status = 'PENDING'
     const order = {
       orderId: 'order-001',
@@ -217,45 +237,9 @@ describe('createApp', () => {
     }
     const evalScript = vi.fn(async () => 1)
     const resolver = vi.fn(async () => ({ customerId: 'customer-001' }))
-    const disabledApp = createApp({
-      ordersModel: ordersModel as never,
-      resolveSession: resolver,
-      mockPaymentEnabled: false,
-      valkey: { eval: evalScript } as never,
-    })
-    const disabledServer = disabledApp.listen(0)
-    const disabledAddress = disabledServer.address()
-    if (!disabledAddress || typeof disabledAddress === 'string')
-      throw new Error('Expected a TCP address')
-
-    try {
-      const disabledResponse = await fetch(
-        `http://127.0.0.1:${disabledAddress.port}/api/orders/order-001/payment-outcome`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ outcome: 'success' }),
-        },
-      )
-      expect(disabledResponse.status).toBe(404)
-      expect(await disabledResponse.json()).toEqual({
-        error: 'Not found',
-        issues: [],
-      })
-      expect(resolver).not.toHaveBeenCalled()
-    } finally {
-      await new Promise<void>((resolve, reject) => {
-        disabledServer.close((error) => {
-          if (error) reject(error)
-          else resolve()
-        })
-      })
-    }
-
     const enabledApp = createApp({
-      ordersModel: ordersModel as never,
+      models: createModels({ OrdersModel: ordersModel }),
       resolveSession: resolver,
-      mockPaymentEnabled: true,
       valkey: { eval: evalScript } as never,
     })
     const enabledServer = enabledApp.listen(0)
@@ -323,9 +307,8 @@ describe('createApp', () => {
     }
     const evalScript = vi.fn(async () => 1)
     const app = createApp({
-      ordersModel: ordersModel as never,
+      models: createModels({ OrdersModel: ordersModel }),
       resolveSession: async () => ({ customerId: 'customer-001' }),
-      mockPaymentEnabled: true,
       valkey: { eval: evalScript } as never,
     })
     const server = app.listen(0)
@@ -360,6 +343,59 @@ describe('createApp', () => {
 
       const conflict = await submit('success')
       expect(conflict.status).toBe(409)
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error)
+          else resolve()
+        })
+      })
+    }
+  })
+
+  it('serves public listing status and returns 404 for an unknown listing', async () => {
+    const findOne = vi.fn(async ({ listingId }: { listingId: string }) => {
+      if (listingId !== 'sale-1') return null
+      return {
+        listingId,
+        productName: 'Bookipi Pro',
+        saleStartsAt: new Date('2026-10-01T10:00:00.000Z'),
+        saleEndsAt: new Date('2026-10-01T11:00:00.000Z'),
+        reserveSlots: 2,
+      }
+    })
+    const countDocuments = vi.fn(async () => 10)
+    const app = createApp({
+      models: createModels({
+        ListingModel: { findOne },
+        ListingSlotModel: { countDocuments },
+      }),
+    })
+    const server = app.listen(0)
+    const address = server.address()
+    if (!address || typeof address === 'string')
+      throw new Error('Expected a TCP address')
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/api/listings/sale-1`,
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        listingId: 'sale-1',
+        productName: 'Bookipi Pro',
+        saleStartsAt: '2026-10-01T10:00:00.000Z',
+        saleEndsAt: '2026-10-01T11:00:00.000Z',
+        stockTotal: 10,
+        reserveSlots: 2,
+        publicStock: 8,
+      })
+
+      const missing = await fetch(
+        `http://127.0.0.1:${address.port}/api/listings/missing`,
+      )
+      expect(missing.status).toBe(404)
+      expect(await missing.json()).toEqual({ error: 'Not found' })
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {

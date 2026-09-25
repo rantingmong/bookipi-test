@@ -4,6 +4,15 @@ import {
   paymentOutcomeSchema,
 } from '#features/payment/feature'
 import { describe, expect, it, vi } from 'vitest'
+import type { Models } from '#types'
+
+function createModels(OrdersModel: object): Models {
+  return {
+    ListingModel: {},
+    ListingSlotModel: {},
+    OrdersModel,
+  } as unknown as Models
+}
 
 describe('payment feature', () => {
   it('applies success and accepts the same terminal status on retry', async () => {
@@ -13,7 +22,7 @@ describe('payment feature', () => {
     const model = { findOneAndUpdate, findOne }
 
     await expect(
-      applyPaymentOutcome(model as never, 'order-001', 'success'),
+      applyPaymentOutcome(createModels(model), 'order-001', 'success'),
     ).resolves.toEqual(complete)
     expect(findOneAndUpdate).toHaveBeenCalledWith(
       { orderId: 'order-001', status: 'PENDING' },
@@ -23,7 +32,7 @@ describe('payment feature', () => {
 
     findOneAndUpdate.mockResolvedValueOnce(null as never)
     await expect(
-      applyPaymentOutcome(model as never, 'order-001', 'success'),
+      applyPaymentOutcome(createModels(model), 'order-001', 'success'),
     ).resolves.toEqual(complete)
   })
 
@@ -34,7 +43,7 @@ describe('payment feature', () => {
       const findOne = vi.fn()
 
       await applyPaymentOutcome(
-        { findOneAndUpdate, findOne } as never,
+        createModels({ findOneAndUpdate, findOne }),
         'order-001',
         outcome,
       )
@@ -62,7 +71,7 @@ describe('payment feature', () => {
 
       await expect(
         applyPaymentOutcome(
-          { findOneAndUpdate, findOne } as never,
+          createModels({ findOneAndUpdate, findOne }),
           'order-001',
           'failure',
         ),
@@ -86,10 +95,10 @@ describe('payment feature', () => {
     const model = { findOneAndUpdate, findOne }
 
     await expect(
-      applyPaymentOutcome(model as never, 'order-001', 'failure'),
+      applyPaymentOutcome(createModels(model), 'order-001', 'failure'),
     ).resolves.toEqual(cancelled)
     await expect(
-      applyPaymentOutcome(model as never, 'order-001', 'expired'),
+      applyPaymentOutcome(createModels(model), 'order-001', 'expired'),
     ).resolves.toEqual(cancelled)
     expect(findOneAndUpdate).toHaveBeenNthCalledWith(
       2,
@@ -105,7 +114,7 @@ describe('payment feature', () => {
 
     await expect(
       applyPaymentOutcome(
-        { findOneAndUpdate, findOne } as never,
+        createModels({ findOneAndUpdate, findOne }),
         'order-001',
         'success',
       ),

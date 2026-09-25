@@ -5,10 +5,13 @@ info:
 paths:
   /api/system/health:
     $ref: ./system/openapi.yml#/paths/~1health
+  /api/listings/{listingId}:
+    $ref: ./listings/get-listing/openapi.yml#/paths/~1listings~1{listingId}
   /api/orders/{orderId}:
     $ref: ./orders/get-order/openapi.yml#/paths/~1orders~1{orderId}
   /api/orders/{orderId}/payment-outcome:
     $ref: ./orders/post-payment-outcome/openapi.yml#/paths/~1orders~1{orderId}~1payment-outcome
 x-groups:
   - ./system/openapi.yml
+  - ./listings/openapi.yml
   - ./orders/openapi.yml

@@ -18,7 +18,7 @@ stateDiagram-v2
 
 The order stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. The SQS worker validates `order-reserved.v1` and inserts its immutable facts with status `PENDING`. `GET /api/orders/{orderId}` returns the order only to its authenticated owner. It returns `404` for an absent or non-owned order. The mock payment page acts on `orderId` after the worker persists the order.
 
-In local or test mode, the payment feature handles `POST /api/orders/{orderId}/payment-outcome`. It changes only a `PENDING` order. Success sets `COMPLETE`. Failure or expiry sets `CANCELLED` and `releaseStatus: PENDING` in one atomic order update. Either `failure` or `expired` can retry the same `CANCELLED` terminal status. A different terminal status returns `409`. After an SQS upsert or payment outcome, the order feature checks that returned durable order. If release is pending, it calls guarded Valkey release and marks it complete only after success.
+The payment feature handles `POST /api/orders/{orderId}/payment-outcome` whenever the backend order routes are configured. It changes only a `PENDING` order. Success sets `COMPLETE`. Failure or expiry sets `CANCELLED` and `releaseStatus: PENDING` in one atomic order update. Either `failure` or `expired` can retry the same `CANCELLED` terminal status. A different terminal status returns `409`. After an SQS upsert or payment outcome, the order feature checks that returned durable order. If release is pending, it calls guarded Valkey release and marks it complete only after success.
 
 If the process stops after MongoDB stores cancellation and no caller retries, no background sweep repairs the pending release. SQS retries when reconciliation fails before acknowledgement. A payment caller must retry a failed or interrupted outcome request.
 
@@ -36,7 +36,7 @@ The worker uses `$setOnInsert` by `orderId`. A replay cannot change an existing 
 - `orderId` is the only order and slot-owner identifier.
 - The client-generated idempotency key stays in Valkey. MongoDB stores no idempotency key, and duplicate SQS delivery upserts by `orderId`.
 - The unique `orderId` index provides idempotent order creation. Conflicting immutable facts fail closed.
-- The mock outcome route requires `MOCK_PAYMENT_ENABLED=true` and `NODE_ENV=development` or `NODE_ENV=test`. It returns `404` when disabled.
+- The payment outcome route is available whenever the backend order routes are configured. It requires the authenticated order owner.
 - The payment feature owns mock outcome transitions. The order feature owns reservation facts and the order model.
 - Provider callback correlation and payment reconciliation remain planned work.
 

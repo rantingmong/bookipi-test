@@ -2,12 +2,29 @@ import {
   addListingSlots,
   createListing,
   getListingCounts,
+  getListingStatus,
   listingInputSchema,
   releaseCancelledSlot,
   seedListingInventory,
 } from '#features/listing/feature'
 import { createListingModels } from '#features/listing/models'
+import type { Models, StorageDependencies } from '#types'
 import { describe, expect, it, vi } from 'vitest'
+
+function createModels(
+  overrides: {
+    ListingModel?: object
+    ListingSlotModel?: object
+    OrdersModel?: object
+  } = {},
+): Models {
+  return {
+    ListingModel: {},
+    ListingSlotModel: {},
+    OrdersModel: {},
+    ...overrides,
+  } as unknown as Models
+}
 
 const validListing = {
   listingId: 'flash-sale-2026',
@@ -30,7 +47,10 @@ describe('listing feature', () => {
         listingInputSchema.parse({ ...validListing, listingId }),
       ).toThrow()
       await expect(
-        addListingSlots({ listingId, additionalSlots: 1 }, {} as never),
+        addListingSlots(
+          { listingId, additionalSlots: 1 },
+          {} as unknown as StorageDependencies,
+        ),
       ).rejects.toThrow()
     }
   })
@@ -101,11 +121,11 @@ describe('listing feature', () => {
     }
     const result = await createListing(validListing, {
       mongoConnection: connection as never,
-      ListingModel: ListingModel as never,
-      ListingSlotModel: ListingSlotModel as never,
-      OrdersModel: {} as never,
+      ListingModel,
+      ListingSlotModel,
+      OrdersModel: {},
       valkeyConnection: valkeyConnection as never,
-    })
+    } as unknown as StorageDependencies)
 
     expect(ListingModel.create).toHaveBeenCalledWith(
       [
@@ -153,15 +173,15 @@ describe('listing feature', () => {
     await expect(
       createListing(validListing, {
         mongoConnection: { startSession: vi.fn(async () => session) } as never,
-        ListingModel: { create: vi.fn(async () => undefined) } as never,
-        ListingSlotModel: { insertMany: vi.fn(async () => undefined) } as never,
-        OrdersModel: {} as never,
+        ListingModel: { create: vi.fn(async () => undefined) },
+        ListingSlotModel: { insertMany: vi.fn(async () => undefined) },
+        OrdersModel: {},
         valkeyConnection: {
           eval: vi.fn(async () => {
             throw new Error('Valkey inventory seed verification failed')
           }),
         } as never,
-      }),
+      } as unknown as StorageDependencies),
     ).rejects.toThrow('Valkey inventory seed verification failed')
   })
 
@@ -170,13 +190,61 @@ describe('listing feature', () => {
     const ListingSlotModel = { countDocuments }
 
     await expect(
-      getListingCounts('flash-sale-2026', 5, {
-        ListingSlotModel: ListingSlotModel as never,
-      }),
+      getListingCounts(
+        'flash-sale-2026',
+        5,
+        createModels({ ListingSlotModel }),
+      ),
     ).resolves.toEqual({ stockTotal: 15, reserveSlots: 5, publicStock: 10 })
     expect(countDocuments).toHaveBeenCalledWith({
       listingId: 'flash-sale-2026',
     })
+  })
+
+  it('returns public listing metadata and slot-derived counts', async () => {
+    const listing = {
+      listingId: 'flash-sale-2026',
+      productName: 'Bookipi Pro',
+      saleStartsAt: new Date('2026-10-01T10:00:00.000Z'),
+      saleEndsAt: new Date('2026-10-01T11:00:00.000Z'),
+      reserveSlots: 5,
+    }
+    const findOne = vi.fn(async () => listing)
+    const countDocuments = vi.fn(async () => 15)
+
+    await expect(
+      getListingStatus(
+        'flash-sale-2026',
+        createModels({
+          ListingModel: { findOne },
+          ListingSlotModel: { countDocuments },
+        }),
+      ),
+    ).resolves.toEqual({
+      listingId: 'flash-sale-2026',
+      productName: 'Bookipi Pro',
+      saleStartsAt: '2026-10-01T10:00:00.000Z',
+      saleEndsAt: '2026-10-01T11:00:00.000Z',
+      stockTotal: 15,
+      reserveSlots: 5,
+      publicStock: 10,
+    })
+    expect(findOne).toHaveBeenCalledWith({ listingId: 'flash-sale-2026' })
+    expect(countDocuments).toHaveBeenCalledWith({
+      listingId: 'flash-sale-2026',
+    })
+  })
+
+  it('returns no public status for an unknown listing', async () => {
+    await expect(
+      getListingStatus(
+        'missing',
+        createModels({
+          ListingModel: { findOne: vi.fn(async () => null) },
+          ListingSlotModel: { countDocuments: vi.fn() },
+        }),
+      ),
+    ).resolves.toBeNull()
   })
 
   it('adds only the next sequential slots inside a transaction', async () => {
@@ -206,10 +274,10 @@ describe('listing feature', () => {
       {
         mongoConnection: connection as never,
         valkeyConnection: {} as never,
-        ListingModel: ListingModel as never,
-        ListingSlotModel: ListingSlotModel as never,
-        OrdersModel: {} as never,
-      },
+        ListingModel,
+        ListingSlotModel,
+        OrdersModel: {},
+      } as unknown as StorageDependencies,
     )
 
     expect(result).toMatchObject({
@@ -238,10 +306,10 @@ describe('listing feature', () => {
     const dependencies = {
       mongoConnection: { startSession },
       valkeyConnection: {} as never,
-      ListingModel: {} as never,
-      ListingSlotModel: {} as never,
-      OrdersModel: {} as never,
-    }
+      ListingModel: {},
+      ListingSlotModel: {},
+      OrdersModel: {},
+    } as unknown as StorageDependencies
 
     await expect(
       addListingSlots(

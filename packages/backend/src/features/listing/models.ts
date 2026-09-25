@@ -7,7 +7,6 @@ import type {
   ListingDocument,
   ListingSlotDocument,
 } from '#features/listing/types'
-import type { Models } from '#types'
 import { Schema, type Connection } from 'mongoose'
 
 const listingSchema = new Schema<ListingDocument>(
@@ -35,9 +34,7 @@ const listingSlotSchema = new Schema<ListingSlotDocument>(
 listingSlotSchema.index({ listingId: 1, slotId: 1 }, { unique: true })
 listingSlotSchema.index({ listingId: 1, state: 1 })
 
-export function createListingModels(
-  connection: Connection,
-): Pick<Models, 'ListingModel' | 'ListingSlotModel'> {
+export function createListingModels(connection: Connection) {
   return {
     ListingModel: connection.model<ListingDocument>(
       'Listing',

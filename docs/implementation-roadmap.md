@@ -133,11 +133,11 @@ Angle A: add a Next.js mock payment page with success and failure buttons, and c
 
 Angle B: run a separate local payment emulator and connect the storefront to its callback endpoint.
 
-Selection recorded by this design: Angle A. Lambda creates `orderId` before the atomic Valkey claim. The SQS event carries `orderId`, `customerId`, `listingId`, and `slotId` to the Express worker. After SQS accepts the event, the payment feature returns the relative `/payment?orderId=<encoded id>` redirect. The page waits for MongoDB persistence before it shows owner-checked buttons. The backend payment feature owns the local or test outcome transition.
+Selection recorded by this design: Angle A. Lambda creates `orderId` before the atomic Valkey claim. The SQS event carries `orderId`, `customerId`, `listingId`, and `slotId` to the Express worker. After SQS accepts the event, the payment feature returns the relative `/payment?orderId=<encoded id>` redirect. The page waits for MongoDB persistence before it shows owner-checked buttons. The backend payment feature owns the outcome transition.
 
 Reason: the page uses the existing order identity without adding a second local service.
 
-Local verification covers API generation, order reads, owner checks, disabled-route behavior, payment redirect creation, success, failure, expiry, same-terminal-status retries, conflicting outcomes, the storefront client wrapper, type checks, package tests, static export, formatting, and diff checks. Provider callbacks remain outside this increment.
+Local verification covers API generation, order reads, owner checks, route availability when order routes are configured, payment redirect creation, success, failure, expiry, same-terminal-status retries, conflicting outcomes, the storefront client wrapper, type checks, package tests, static export, formatting, and diff checks. Provider callbacks remain outside this increment.
 
 ## Increment 7: unified order reconciliation and durable slot release
 
@@ -155,7 +155,7 @@ Local verification covers duplicate SQS events, status transitions, cancellation
 
 ## Increment 8: storefront purchase experience
 
-Status: awaiting review.
+Status: implemented. Unit and controlled browser checks cover local request behavior. CloudFront, API Gateway, deployed authorizer, and credentialed preflight checks remain pending.
 
 Angle A: let the browser call the configured CloudFront checkout endpoint directly. CloudFront routes to API Gateway REST API, whose REQUEST Lambda authorizer checks the Better Auth session in Valkey before checkout Lambda runs.
 
@@ -165,7 +165,9 @@ Selection recorded by this design: Angle A.
 
 Reason: the purchase request must bypass Express. The direct path has fewer request hops and keeps the hot path in API Gateway and Lambda.
 
-Planned verification: Playwright sign-in, status reads, direct checkout, session authorization, missing and unapproved Origin rejection, purchase retry, mock payment, result reads, access control, and disabled checkout response caching. Verify cookie scope and CloudFront cookie and Origin forwarding in a deployment-shaped test. If origins differ, verify credentialed CORS on POST and error responses, plus an unauthenticated OPTIONS method. LocalStack does not prove these behaviors.
+Local verification: backend tests cover public listing status and durable counts. Authorizer tests cover missing and unapproved Origin rejection before runtime access, session options, and deny paths. Processor tests cover no-store and exact-origin credentialed CORS. Storefront tests cover listing reads and direct checkout request shape. A controlled Playwright test verifies session and listing display, direct request fields, cookie forwarding, same-key retry, and payment-page navigation.
+
+Deployment verification remains required. Check CloudFront routing, cookie and Origin forwarding, disabled checkout response caching, disabled API Gateway authorizer-result caching, the deployed authorizer against Valkey, and cookie scope. If origins differ, check credentialed CORS on success and relevant errors. Check an unauthenticated API Gateway `OPTIONS` method that does not invoke checkout. Controlled browser routes and LocalStack do not prove these behaviors.
 
 ## Increment 9: stress and resilience evidence
 

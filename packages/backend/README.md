@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The backend provides the Express API, Better Auth email/password access, durable listing and slot models, and a durable order model. The models do not provide an admin API or sale routes.
+The backend provides the Express API, Better Auth email/password access, a public listing-status route, durable listing and slot models, and a durable order model. It does not provide an admin API.
 
 ## Runtime
 
@@ -12,19 +12,23 @@ The backend provides the Express API, Better Auth email/password access, durable
 
 The server registers the listing, slot, and order models before it listens. It waits for their indexes to initialize. The seed command waits for listing and slot indexes before it writes data.
 
+The API exposes public `GET /api/listings/{listingId}` status. It returns listing metadata and counts derived from slot documents. It returns `404` for an unknown listing. The status does not expose slot IDs and is not live Valkey stock.
+
 The environment feature validates startup settings in `src/features/env`. The auth feature owns authentication behavior and session identity mapping in `src/features/auth`. The MongoDB service uses one Mongoose connection and exposes its native MongoDB client and database to Better Auth. The MongoDB, SQS, and Valkey clients live in `src/services`.
 
 Set `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL`. Set `STOREFRONT_ORIGIN` when the storefront uses a different origin. Better Auth stores users and credentials in MongoDB and sessions in Valkey secondary storage under `bookipi:auth:`. Sessions do not fall back to MongoDB.
 
 Backend startup requires `AWS_REGION` and `SQS_QUEUE_URL` for the SQS worker, in addition to the backend settings above.
 
-Set `MOCK_PAYMENT_ENABLED=true` with `NODE_ENV=development` or `NODE_ENV=test` to enable mock outcomes. The route stays disabled in production and returns `404`.
+The authenticated payment outcome route is available whenever the order routes are configured.
 
 Run `pnpm generate:api` before you start the backend in development. The root `typecheck`, `test`, and `build` scripts generate API code first.
 
 The root OpenAPI file lists group configuration files. Each group file lists endpoint contracts in `x-endpoints`. Each endpoint file defines one operation. Run `pnpm generate:api` from the repository root to build ignored schemas, routers, handler bindings, and the browser client.
 
 Keep each endpoint's `openapi.yml` beside its tracked `handler.ts`. Each API group has an `openapi.yml` and `router.ts`. Put domain logic in `src/features/<name>` and external integrations in `src/services/<name>`. Use `schema.ts` for external Zod schemas, `constants.ts` for internal constants, `types.ts` for internal types, and `models.ts` for Mongoose models.
+
+Each API group exports a `create*Router` factory. `createApiRouter` creates a fresh root router and mounts the system and listings routers. It adds order routes only when order options exist. The order feature owns the customer-scoped order lookup and reports absent or non-owned orders with a feature error. API handlers translate that error to `404`.
 
 The generator clears generated output before it runs. Keep API business logic in tracked endpoint `handler.ts` files. Keep authentication behavior in `src/features/auth`.
 
@@ -40,7 +44,7 @@ The listing feature validates listing identity, display name, sale window, `rese
 
 The listing feature calls the Valkey client after its MongoDB transaction commits. It seeds and verifies the pool before it publishes the sale. If Valkey fails, the sale remains unpublished and listing creation returns an error.
 
-The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. `orderId` identifies the checkout attempt and slot owner. Its statuses are `PENDING`, `COMPLETE`, and `CANCELLED`. A cancelled order can have release status `PENDING` or `COMPLETE`. Active partial indexes prevent a customer from holding two active orders for one listing and prevent two active orders from owning one listing slot. The order feature owns reservation persistence, models, and per-order release reconciliation. The SQS worker inserts new reservation facts as `PENDING`. It uses `$setOnInsert`, so a replay does not overwrite stored facts, timestamps, terminal status, or release state. A conflicting binding fails processing and remains unacknowledged. The payment feature applies local or test outcomes with same-terminal-status retry and conflicting-status rejection.
+The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. `orderId` identifies the checkout attempt and slot owner. Its statuses are `PENDING`, `COMPLETE`, and `CANCELLED`. A cancelled order can have release status `PENDING` or `COMPLETE`. Active partial indexes prevent a customer from holding two active orders for one listing and prevent two active orders from owning one listing slot. The order feature owns reservation persistence, models, and per-order release reconciliation. The SQS worker inserts new reservation facts as `PENDING`. It uses `$setOnInsert`, so a replay does not overwrite stored facts, timestamps, terminal status, or release state. A conflicting binding fails processing and remains unacknowledged. The payment feature applies outcomes with same-terminal-status retry and conflicting-status rejection.
 
 The worker long-polls up to ten SQS messages for 20 seconds. It validates each body against the strict `order-reserved.v1` event schema. It stores the order, reconciles any pending cancellation release, then deletes the message. A reconciliation error leaves the message unacknowledged. A MongoDB write error stops polling, closes the API server, and fails the backend process. The queue deployment owns visibility, retry, and dead-letter settings.
 
@@ -78,7 +82,7 @@ The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`,
 
 A cancelled order keeps its original `(listingId, customerId, client idempotencyKey)` binding. A new client key can start a new checkout for that customer and listing.
 
-`POST /api/orders/{orderId}/payment-outcome` requires the authenticated order owner and `MOCK_PAYMENT_ENABLED=true` with `NODE_ENV=development` or `NODE_ENV=test`. The route returns `404` when the flag is disabled. It does not add payment fields. Provider callback correlation and reconciliation remain planned.
+`POST /api/orders/{orderId}/payment-outcome` requires the authenticated order owner. It does not add payment fields. Provider callback correlation and reconciliation remain planned.
 
 After SQS persists the order, Express checks the authenticated owner before it shows mock outcome buttons.
 
@@ -102,7 +106,7 @@ MongoDB derives `stockTotal` from slot documents. It does not store `stockTotal`
 
 ## Gotchas
 
-The health endpoint has no business storage. Authentication, listing and slot models, order schema, demo seed, listing Valkey methods, the SQS reservation worker, authenticated order reads, mock status transitions, and slot release after mock cancellation are implemented. The API has no listing route. Provider reconciliation, migrations, and local service URLs are not implemented.
+The health endpoint has no business storage. Authentication, public listing status, listing and slot models, order schema, demo seed, listing Valkey methods, the SQS reservation worker, authenticated order reads, mock status transitions, and slot release after mock cancellation are implemented. Provider reconciliation, migrations, and local service URLs are not implemented.
 
 Do not make Express the hot-path inventory authority.
 
@@ -157,3 +161,4 @@ The system has no durable replay if Lambda stops after the Valkey pop and before
 - Added post-transaction Valkey inventory seed and guarded cancellation release to the listing feature.
 - Added the direct SQS reservation worker and immutable order upsert.
 - Added authenticated order reads and local or test payment outcomes. MongoDB integration checks remain pending.
+- Added public listing status with counts derived from durable slot documents.

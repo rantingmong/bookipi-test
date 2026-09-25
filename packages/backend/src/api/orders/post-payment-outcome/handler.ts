@@ -1,8 +1,16 @@
 import { HttpError } from '#api/orders/generated/_shared/errors'
 import type { Order } from '#api/orders/generated/models'
 import { toOrderResponse } from '#api/orders/get-order/handler'
-import { getOrdersRequestContext } from '#api/orders/request-context'
-import { reconcileCancelledOrderRelease } from '#features/order/feature'
+import {
+  getRequestIdentity,
+  getRequestModels,
+  getRequestValkey,
+} from '#api/middleware/request-context'
+import {
+  findOwnedOrder,
+  OrderNotFoundError,
+  reconcileCancelledOrderRelease,
+} from '#features/order/feature'
 import {
   applyPaymentOutcome,
   PaymentOutcomeConflictError,
@@ -18,27 +26,25 @@ export async function postPaymentOutcome(
     throw new HttpError(400, 'Invalid mock outcome')
   }
 
-  const { identity, ordersModel, valkey } = getOrdersRequestContext()
-  const order = await ordersModel.findOne({
-    orderId,
-    customerId: identity.customerId,
-  })
-  if (!order) {
-    throw new HttpError(404, 'Not found')
-  }
-
+  const identity = getRequestIdentity()
+  const models = getRequestModels()
+  const valkey = getRequestValkey()
   try {
+    await findOwnedOrder(models, orderId, identity.customerId)
     const updated = await applyPaymentOutcome(
-      ordersModel,
+      models,
       orderId,
       parsedBody.data.outcome,
     )
     if (!updated) {
       throw new HttpError(404, 'Not found')
     }
-    await reconcileCancelledOrderRelease(updated, { ordersModel, valkey })
+    await reconcileCancelledOrderRelease(updated, { models, valkey })
     return toOrderResponse(updated)
   } catch (error) {
+    if (error instanceof OrderNotFoundError) {
+      throw new HttpError(404, 'Not found')
+    }
     if (error instanceof PaymentOutcomeConflictError) {
       throw new HttpError(409, 'Order already has a different outcome')
     }

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { seedListingData } from '#features/seed/feature'
+import type { OrderDocument } from '#features/order/types'
+import type { StorageDependencies } from '#types'
+import type { Model } from 'mongoose'
 
 describe('demo seed feature', () => {
   it('uses listing creation to store and publish ten slots', async () => {
@@ -17,7 +20,7 @@ describe('demo seed feature', () => {
       mongoConnection: { startSession: vi.fn(async () => session) },
       ListingModel: { create },
       ListingSlotModel: { insertMany },
-      OrdersModel: {} as never,
+      OrdersModel: {} as unknown as Model<OrderDocument>,
       valkeyConnection: {
         eval: evalScript,
         llen: vi.fn(async () => 10),
@@ -25,7 +28,9 @@ describe('demo seed feature', () => {
       },
     }
 
-    const result = await seedListingData(dependencies as never)
+    const result = await seedListingData(
+      dependencies as unknown as StorageDependencies,
+    )
 
     expect(result).toMatchObject({
       stockTotal: 10,

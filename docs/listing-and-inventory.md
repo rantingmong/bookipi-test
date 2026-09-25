@@ -36,6 +36,8 @@ sequenceDiagram
 
 The listing document stores its identifier, product display name, sale window, and `reserveSlots`. It does not store a stock total. The initial slot count is an operation parameter. MongoDB derives `stockTotal` by counting listing-slot documents. The system derives `publicStock = stockTotal - reserveSlots`.
 
+The public `GET /api/listings/{listingId}` route returns the listing ID, product name, ISO sale times, `stockTotal`, `reserveSlots`, and `publicStock`. It returns `404` for an unknown listing. It does not expose slot IDs. The storefront displays `publicStock` as listing information. It does not use that value as live stock or as the sold-out rule.
+
 The create operation requires a positive integer `initialSlotCount` and `0 <= reserveSlots <= initialSlotCount`. Express creates the listing and its initial slots in one MongoDB transaction.
 
 The add-slots operation requires a positive integer count. It writes the listing timestamp inside a transaction, counts current slot documents, and inserts only the next sequential IDs. Concurrent additions serialize through the listing write. The unique `{ listingId: 1, slotId: 1 }` index rejects duplicate IDs.

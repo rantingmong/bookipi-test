@@ -139,3 +139,5 @@ export function useLoginPageState() {
     session: session.data,
   }
 }
+
+export type LoginPageState = ReturnType<typeof useLoginPageState>

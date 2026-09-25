@@ -4,6 +4,7 @@ import { createOrderModel } from '#features/order/models'
 import { seedListingData } from '#features/seed/feature'
 import { createMongoService } from '#services/mongodb/client'
 import { createValkeyService } from '#services/valkey/client'
+import type { Models } from '#types'
 
 async function runSeed() {
   const config = readListingSeedEnvConfig()
@@ -12,16 +13,17 @@ async function runSeed() {
 
   try {
     await Promise.all([mongo.connect(), valkey.client.connect()])
-    const listingModels = createListingModels(mongo.connection)
-    const orderModels = createOrderModel(mongo.connection)
+    const models: Models = {
+      ...createListingModels(mongo.connection),
+      ...createOrderModel(mongo.connection),
+    }
     await Promise.all([
-      listingModels.ListingModel.init(),
-      listingModels.ListingSlotModel.init(),
-      orderModels.OrdersModel.init(),
+      models.ListingModel.init(),
+      models.ListingSlotModel.init(),
+      models.OrdersModel.init(),
     ])
     await seedListingData({
-      ...listingModels,
-      ...orderModels,
+      ...models,
       mongoConnection: mongo.connection,
       valkeyConnection: valkey.client,
     })

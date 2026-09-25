@@ -2,7 +2,7 @@ import {
   addListingSlotsInputSchema,
   listingInputSchema,
 } from '#features/listing/schema'
-import type { StorageDependencies } from '#types'
+import type { Models, StorageDependencies } from '#types'
 import type { Redis } from 'ioredis'
 
 export { listingInputSchema }
@@ -129,15 +129,26 @@ export async function createListing(
 export async function getListingCounts(
   listingId: string,
   reserveSlots: number,
-  dependencies: Pick<StorageDependencies, 'ListingSlotModel'>,
+  models: Models,
 ) {
-  const stockTotal = await dependencies.ListingSlotModel.countDocuments({
-    listingId,
-  })
+  const stockTotal = await models.ListingSlotModel.countDocuments({ listingId })
   return {
     stockTotal,
     reserveSlots,
     publicStock: stockTotal - reserveSlots,
+  }
+}
+
+export async function getListingStatus(listingId: string, models: Models) {
+  const listing = await models.ListingModel.findOne({ listingId })
+  if (!listing) return null
+  const counts = await getListingCounts(listingId, listing.reserveSlots, models)
+  return {
+    listingId: listing.listingId,
+    productName: listing.productName,
+    saleStartsAt: listing.saleStartsAt.toISOString(),
+    saleEndsAt: listing.saleEndsAt.toISOString(),
+    ...counts,
   }
 }
 

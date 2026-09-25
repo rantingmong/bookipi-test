@@ -6,7 +6,7 @@ This repository contains the bootstrap and shared contracts for a high-throughpu
 
 The source requirements define one configurable sale, one product, limited stock, one item per user, purchase status, purchase results, a React frontend, high throughput, resilience, no overselling, unit and integration tests, stress tests, a system diagram, and implementation documentation.
 
-Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. Increment 2 adds authentication and durable listing and order models. Increment 3 adds verified Valkey listing publication, atomic inventory methods, and guarded cancellation release. Increment 4 adds the checkout Lambda REST handler and SQS reservation event publication. Increment 5 adds an Express SQS worker that stores reservation facts in MongoDB. Increment 6 adds a post-SQS payment redirect, the owner-checked mock payment page, and local or test payment outcomes.
+Increment 1 adds package tooling, an OpenAPI health endpoint, Zod request validation, Express startup, and a static-export Next.js shell. Increment 2 adds authentication and durable listing and order models. Increment 3 adds verified Valkey listing publication, atomic inventory methods, and guarded cancellation release. Increment 4 adds the checkout Lambda REST handler and SQS reservation event publication. Increment 5 adds an Express SQS worker that stores reservation facts in MongoDB. Increment 6 adds a post-SQS payment redirect, the owner-checked mock payment page, and payment outcomes. Increment 8 adds public listing status, direct storefront checkout, and the REST REQUEST authorizer.
 
 ## Flow
 
@@ -18,13 +18,13 @@ Express stores listing identity, product display name, sale window, and `reserve
 
 Express creates the listing and its initial slot documents in one MongoDB transaction. It seeds all slots in one Valkey availability list and publishes only after seed verification. Every slot in this pool is claimable. Atomic Valkey pop prevents two requests from claiming the same slot. Transactional slot growth counts the existing slot documents and inserts the next sequential IDs.
 
-The browser sends a purchase request directly to the configured CloudFront checkout endpoint. CloudFront routes the request through API Gateway to the checkout Lambda. Express never invokes Lambda and never proxies the purchase request.
+The storefront reads public listing status from `GET /api/listings/{listingId}`. The browser sends a purchase request directly to the configured CloudFront checkout endpoint. CloudFront routes the request through API Gateway to the checkout Lambda. Express never invokes Lambda and never proxies the purchase request.
 
 For cookie-authenticated checkout POST requests, an API Gateway REST REQUEST Lambda authorizer checks `Origin` first. It rejects a missing or unapproved value without calling Better Auth or reading Valkey. Deployment configuration supplies the exact storefront origin allowlist.
 
 After `Origin` passes, the authorizer checks the opaque Better Auth cookie and reads the session from Valkey secondary storage. It passes trusted `customerId` to Lambda. It does not call Express or MongoDB. Better Auth uses MongoDB for users and credentials. The Lambda ignores browser-supplied `customerId` values. CloudFront forwards the session cookie and does not cache checkout responses.
 
-The authorizer uses Better Auth `getSession` with `disableRefresh: true` and `disableCookieCache: true`. It does not refresh an active session. Better Auth may still delete an expired session and return an expiry cookie. The authorizer cannot forward that cookie to the browser. API Gateway authorizer-result caching is disabled. A missing session or Valkey error denies checkout. Valkey loss removes session state, so customers must sign in again after recovery.
+The authorizer uses Better Auth `getSession` with `disableRefresh: true` and `disableCookieCache: true`. It does not refresh an active session. Better Auth may still delete an expired session and return an expiry cookie. The authorizer cannot forward that cookie to the browser. API Gateway authorizer-result caching must be disabled. A missing session or Valkey error denies checkout. Valkey loss removes session state, so customers must sign in again after recovery.
 
 Serve auth and checkout under the same host, or keep the checkout hostname within the Better Auth cookie scope. If the storefront and checkout origins differ, the storefront request must use `credentials: 'include'`. The exact hostnames remain a deployment choice.
 
@@ -32,7 +32,7 @@ The client sends an idempotency key. Lambda validates but does not change it. Va
 
 The Express SQS worker long-polls SQS, validates each strict `order-reserved.v1` event, and upserts the durable order by `orderId`. It acknowledges a message only after MongoDB persistence succeeds. It does not overwrite conflicting facts or reopen a terminal order.
 
-The `/payment?orderId=...` page waits for MongoDB persistence, then uses an authenticated order read before it shows outcome controls. The owner can submit a mock success or failure in local or test mode.
+The `/payment?orderId=...` page waits for MongoDB persistence, then uses an authenticated order read before it shows outcome controls. The owner can submit a mock success or failure.
 
 The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. The payment feature applies mock outcomes. Provider callback correlation and payment reconciliation remain planned. The order feature reconciles cancellation releases through the guarded Valkey method after each reservation batch item and payment outcome.
 
@@ -46,10 +46,10 @@ The [reliability facet](docs/reliability.md) records current safeguards and poss
 
 The package map is:
 
-- `packages/backend`: Express API, Better Auth email/password, listing and slot models, order model, listing publication, deterministic demo seed, SQS reservation worker, authenticated order reads, and a local or test payment feature; sale reads remain planned.
+- `packages/backend`: Express API, Better Auth email/password, public listing status, listing and slot models, order model, listing publication, deterministic demo seed, SQS reservation worker, authenticated order reads, and a payment feature.
 - `packages/storefront`: Next.js browser experience.
 - `packages/checkout-processor`: AWS Lambda request handling, hot-path reservation, payment redirect creation, and SQS publication.
-- `packages/checkout-authorizer`: API Gateway REST REQUEST authorization, planned for a later increment.
+- `packages/checkout-authorizer`: API Gateway REST REQUEST authorization with Better Auth session checks through Valkey.
 - `docs`: master flow, design facets, test strategy, and implementation roadmap.
 
 The system uses pnpm, Node.js 24, TypeScript, and ECMAScript modules.
@@ -72,7 +72,7 @@ The payment processor is mocked initially.
 
 The storefront payment page provides success and failure buttons only after the SQS worker persists the order. The checkout response includes a relative payment redirect and the page uses `orderId` for its owner-checked outcome route.
 
-The payment outcome route requires the authenticated order owner and a local or test-only flag.
+The payment outcome route requires the authenticated order owner and configured backend order routes.
 
 The provider-shaped mock callback route requires service authentication. The browser cannot call it.
 
@@ -86,15 +86,15 @@ Provider callback correlation and reconciliation remain planned. The order model
 
 Real payment-provider integration is outside this take-home scope.
 
-The separate REST API authorizer uses `packages/checkout-authorizer`. Its Valkey network setup remains open.
+The separate REST API authorizer uses `packages/checkout-authorizer`. Its Valkey network setup remains a deployment choice.
 
 Read the design documents before runtime implementation.
 
 ## Gotchas
 
-The home page provides the API health check. Sign-up, login, and mock payment pages provide the current account and payment flow. The checkout processor handles REST proxy requests, claims inventory in Valkey, publishes `order-reserved.v1` to SQS, then creates the payment redirect. Backend startup requires `AWS_REGION` and `SQS_QUEUE_URL` and starts the SQS worker after MongoDB indexes initialize. The storefront checkout flow, local service setup, and deployment remain planned.
+The home page shows the configured listing and current session. It sends checkout directly to `NEXT_PUBLIC_CHECKOUT_URL` and reuses one idempotency key after request failure. Sign-up, login, and mock payment pages provide the account and payment flow. The checkout processor handles REST proxy requests, claims inventory in Valkey, publishes `order-reserved.v1` to SQS, then creates the payment redirect. Backend startup requires `AWS_REGION` and `SQS_QUEUE_URL` and starts the SQS worker after MongoDB indexes initialize.
 
-The planned local URLs are not available.
+The checkout URL is a build-time storefront setting. This repository does not define a deployed CloudFront URL or a local checkout service.
 
 A crash or Valkey loss after the slot pop and before SQS publication can leave no queued order event. The design provides no durable replay for this gap and fails closed when slot ownership is unclear.
 
@@ -103,6 +103,8 @@ The repository has not performed external publication.
 Do not report benchmark results before a stress test produces them.
 
 If the storefront and checkout origins differ, configure credentialed CORS. Return the exact approved storefront origin in `Access-Control-Allow-Origin`, never `*`, and return `Access-Control-Allow-Credentials: true` on successful POST and relevant error responses. CloudFront must allow and forward `OPTIONS` and its preflight headers. The unauthenticated API Gateway `OPTIONS` method returns the exact origin and credentials headers, plus `Access-Control-Allow-Methods` and `Access-Control-Allow-Headers` for required values. It must not use the checkout POST authorizer or invoke checkout. Same-origin checkout does not need a browser preflight.
+
+The storefront reads `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_LISTING_ID`, and `NEXT_PUBLIC_CHECKOUT_URL` at build time. The authorizer checks the exact `STOREFRONT_ORIGIN`. Set the same value for checkout response CORS when origins differ.
 
 Commands in this README apply to the current runtime and planned system.
 
@@ -135,6 +137,8 @@ pnpm install
 pnpm generate:api
 pnpm --filter @bookipi/backend dev
 pnpm --filter @bookipi/backend seed
+pnpm --filter @bookipi/checkout-authorizer test
+pnpm --filter @bookipi/storefront test:e2e
 pnpm format
 pnpm format:check
 pnpm typecheck
@@ -143,7 +147,7 @@ pnpm build
 git diff --check
 ```
 
-Use Node.js 24 and pnpm 11.20. Set `NEXT_PUBLIC_API_BASE_URL` at build time to configure the static storefront's browser API client. Set `NEXT_PUBLIC_MOCK_PAYMENT_ENABLED=true` for local or test storefront builds that need mock outcome controls. Local service URLs are not defined.
+Use Node.js 24 and pnpm 11.20. Set `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_LISTING_ID`, and `NEXT_PUBLIC_CHECKOUT_URL` at build time. Local service URLs are not defined.
 
 The backend uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its development server uses port `3001`. Backend source uses the `#app`, `#api/*`, `#features/*`, `#services/*`, and `#types` package imports.
 
@@ -178,3 +182,4 @@ The backend uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its
 - Added the Express SQS worker and idempotent MongoDB persistence for increment 5. AWS SQS and MongoDB integration checks remain pending.
 - Implemented the static mock payment page, authenticated order reads, post-SQS redirect creation, and local or test payment outcomes for increment 6. Browser, MongoDB, SQS, and deployment checks remain pending.
 - Added trigger-driven mock cancellation release reconciliation with guarded Valkey marker recovery. MongoDB and Valkey integration checks remain pending.
+- Implemented Increment 8 public listing status, direct storefront checkout, and the Valkey-backed REST REQUEST authorizer. Deployment checks remain pending.

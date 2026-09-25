@@ -14,12 +14,15 @@ The feature also provides a guarded cancellation release method. It checks the o
 
 The feature can add slots to an existing listing in one transaction. It counts the current slot documents and inserts only the next sequential slot identifiers. It does not store a stock total. A listing timestamp write serializes concurrent additions. The unique `{ listingId, slotId }` index rejects collisions.
 
+The public listing-status read returns durable listing metadata and counts derived from slot documents. It returns `listingId`, `productName`, `saleStartsAt`, `saleEndsAt`, `stockTotal`, `reserveSlots`, and `publicStock`. It derives `stockTotal` from the slot documents and derives `publicStock` as `stockTotal - reserveSlots`. The API returns `404` when the listing does not exist. `publicStock` is an advertised durable count. Valkey inventory decides whether checkout is sold out.
+
 The feature does not expose an admin API. The demo seed lives in `src/features/seed` and calls `createListing`.
 
 ## Change log
 
 ### 2026-09-24
 
+- Added the public listing-status read with durable metadata and derived slot counts.
 - Added Valkey seed, publication, and guarded cancellation release to the listing feature.
 - Made a matching cancellation release marker an idempotent success.
 - Updated guarded release to clear the matching active-customer order key.

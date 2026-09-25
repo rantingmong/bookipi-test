@@ -1,6 +1,6 @@
 # Payment feature
 
-The payment feature applies a local or test payment outcome to a stored order. A success changes `PENDING` to `COMPLETE`. A failure or expiry changes `PENDING` to `CANCELLED` and sets `releaseStatus` to `PENDING` in the same document update. The request handler then reconciles the pending release before it returns a response.
+The payment feature applies an outcome to a stored order. A success changes `PENDING` to `COMPLETE`. A failure or expiry changes `PENDING` to `CANCELLED` and sets `releaseStatus` to `PENDING` in the same document update. The request handler then reconciles the pending release before it returns a response.
 
 A failed or interrupted outcome request must be retried by its caller. No background sweep repairs a pending release.
 

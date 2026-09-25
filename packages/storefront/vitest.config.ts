@@ -8,5 +8,5 @@ export default defineConfig({
   resolve: {
     alias: { '@': resolve(packageRoot, 'src') },
   },
-  test: { environment: 'node' },
+  test: { environment: 'node', include: ['src/**/*.test.{ts,tsx}'] },
 })

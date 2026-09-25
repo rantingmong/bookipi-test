@@ -140,3 +140,5 @@ export function useSignUpPageState() {
     session: session.data,
   }
 }
+
+export type SignUpPageState = ReturnType<typeof useSignUpPageState>

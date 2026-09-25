@@ -26,6 +26,8 @@ Read the root `README.md` and every applicable directory `README.md` before work
 
 ## Backend implementation decisions
 
+- Pass the shared full `Models` collection at API and runtime boundaries. Never narrow Mongoose model interfaces with `Pick`.
+
 - Put domain behavior in `src/features/<name>` and external integrations in `src/services/<name>`.
 - Give each implemented feature a `README.md`, `feature.ts`, and focused `feature.test.ts`.
 - Use `schema.ts` for externally defined Zod schemas, `constants.ts` for internal constants, `types.ts` for internal types, and `models.ts` for Mongoose models in backend features.

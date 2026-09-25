@@ -12,6 +12,7 @@ import { listenHttpServer } from '#services/http/server'
 import { createMongoService } from '#services/mongodb/client'
 import { createSqsClient } from '#services/sqs/client'
 import { createValkeyService } from '#services/valkey/client'
+import type { Models } from '#types'
 import { toNodeHandler } from 'better-auth/node'
 
 async function prepare() {
@@ -32,12 +33,14 @@ async function prepare() {
   try {
     await Promise.all([mongo.connect(), valkey.client.connect()])
 
-    const listingModels = createListingModels(mongo.connection)
-    const orderModel = createOrderModel(mongo.connection)
+    const models: Models = {
+      ...createListingModels(mongo.connection),
+      ...createOrderModel(mongo.connection),
+    }
     await Promise.all([
-      listingModels.ListingModel.init(),
-      listingModels.ListingSlotModel.init(),
-      orderModel.OrdersModel.init(),
+      models.ListingModel.init(),
+      models.ListingSlotModel.init(),
+      models.OrdersModel.init(),
     ])
 
     const auth = createAuthFeature({
@@ -49,7 +52,7 @@ async function prepare() {
     return {
       auth,
       config,
-      orderModel,
+      models,
       valkey,
       worker,
       shutdown,
@@ -63,7 +66,7 @@ async function prepare() {
 async function startServer({
   auth,
   config,
-  orderModel,
+  models,
   valkey,
   shutdown,
 }: Awaited<ReturnType<typeof prepare>>) {
@@ -71,10 +74,9 @@ async function startServer({
     const app = createApp({
       authHandler: toNodeHandler(auth.handler),
       storefrontOrigin: config.storefrontOrigin,
-      ordersModel: orderModel.OrdersModel,
+      models,
       resolveSession: (request) =>
         resolveSessionIdentity(auth, request.headers),
-      mockPaymentEnabled: config.mockPaymentEnabled,
       valkey: valkey.client,
     })
     const port = Number(process.env.PORT ?? 3001)
@@ -89,7 +91,7 @@ async function startServer({
 }
 
 async function startWorker({
-  orderModel,
+  models,
   valkey,
   worker,
 }: Awaited<ReturnType<typeof prepare>>) {
@@ -97,7 +99,7 @@ async function startWorker({
     const messages = await worker.receiveMessages()
     await processSqsBatch(
       messages,
-      orderModel.OrdersModel,
+      models,
       worker.sqs,
       worker.queueUrl,
       valkey.client,

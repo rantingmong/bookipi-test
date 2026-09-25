@@ -31,8 +31,6 @@ export function usePaymentPageState() {
     timedOut: false,
   })
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
-  const mockPaymentEnabled =
-    process.env.NEXT_PUBLIC_MOCK_PAYMENT_ENABLED === 'true'
   let orderKey: ReturnType<typeof getPaymentOrderKey> = null
   if (apiBaseUrl) {
     orderKey = getPaymentOrderKey(customerId, orderId)
@@ -160,9 +158,10 @@ export function usePaymentPageState() {
     checkAgain: () => orderQuery.mutate(),
     errorMessage,
     isLoadingOutcome: outcomeMutation.isMutating,
-    mockPaymentEnabled,
     order: currentOrder,
     orderId,
     viewState,
   }
 }
+
+export type PaymentPageState = ReturnType<typeof usePaymentPageState>

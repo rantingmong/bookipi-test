@@ -1,33 +1,28 @@
 import { corsMiddleware } from '#api/middleware/cors'
+import { requestContextMiddleware } from '#api/middleware/request-context'
 import type { SessionIdentity } from '#api/middleware/require-session'
-import { createOrdersRouter } from '#api/orders/router'
-import { apiRouter } from '#api/router'
-import type { OrderDocument } from '#features/order/types'
+import { createApiRouter } from '#api/router'
+import type { OrdersRouterOptions } from '#api/orders/router'
+import type { Models } from '#types'
 import type { RequestHandler } from 'express'
 import express from 'express'
 import type { Redis } from 'ioredis'
-import type { Model } from 'mongoose'
 
 type AppOptions = {
   authHandler?: RequestHandler
   storefrontOrigin?: string
-  ordersModel?: Pick<
-    Model<OrderDocument>,
-    'findOne' | 'findOneAndUpdate' | 'updateOne'
-  >
+  models?: Models
   resolveSession?: (
     request: express.Request,
   ) => Promise<SessionIdentity | undefined>
-  mockPaymentEnabled?: boolean
   valkey?: Redis
 }
 
 export function createApp({
   authHandler,
   storefrontOrigin,
-  ordersModel,
+  models,
   resolveSession,
-  mockPaymentEnabled = false,
   valkey,
 }: AppOptions = {}) {
   const app = express()
@@ -36,19 +31,13 @@ export function createApp({
   app.use(corsMiddleware(storefrontOrigin))
   if (authHandler) app.all('/api/auth/*splat', authHandler)
   app.use(express.json())
-  app.use('/api', apiRouter)
-  if (ordersModel && resolveSession) {
+  app.use('/api', requestContextMiddleware({ models, valkey }))
+  let apiRouterOptions: OrdersRouterOptions | undefined
+  if (models && resolveSession) {
     if (!valkey) throw new Error('Order routes require a Valkey client')
-    app.use(
-      '/api',
-      createOrdersRouter({
-        ordersModel,
-        resolveSession,
-        mockPaymentEnabled,
-        valkey,
-      }),
-    )
+    apiRouterOptions = { resolveSession }
   }
+  app.use('/api', createApiRouter(apiRouterOptions))
 
   app.use(
     (
