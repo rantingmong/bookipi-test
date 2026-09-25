@@ -20,6 +20,10 @@ The demo seed command requires `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_UR
 
 Backend startup also requires `AWS_REGION` and `SQS_QUEUE_URL`. The server starts the SQS worker after MongoDB connects and the order indexes initialize.
 
+Set optional `SQS_ENDPOINT_URL` to use LocalStack. The local stack points it to `http://localstack:4566`.
+
+The seed accepts optional `DEMO_LISTING_ID`, `DEMO_SALE_STARTS_AT`, and `DEMO_SALE_ENDS_AT` values. The integration suite sets a unique ID and active sale window for each run.
+
 Mock payment outcomes do not require a feature flag.
 
 ## Tests

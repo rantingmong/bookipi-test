@@ -1,0 +1,142 @@
+name: bookipi-local
+
+services:
+  localstack:
+    image: localstack/localstack:2026.8.4
+    environment:
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?Set LOCALSTACK_AUTH_TOKEN from .localstack}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET for the integration run}
+      SERVICES: cloudformation,iam,lambda,logs,s3,sqs,apigateway
+      LAMBDA_DOCKER_NETWORK: bookipi-local
+      LAMBDA_DOCKER_FLAGS: -v /var/run/docker.sock:/var/run/docker.sock
+      AWS_DEFAULT_REGION: ${AWS_REGION:-ap-southeast-1}
+    ports:
+      - '4566:4566'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ..:/workspace:ro
+    networks:
+      bookipi-local:
+        aliases:
+          - bookipi-checkout.execute-api.localhost.localstack.cloud
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bash',
+          '-c',
+          'curl -fsS http://localhost:4566/_localstack/health >/dev/null',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  mongodb:
+    image: mongo:8.0
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'mongosh',
+          '--quiet',
+          '--eval',
+          'if (!db.adminCommand({hello: 1}).isWritablePrimary) quit(1)',
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    networks:
+      - bookipi-local
+
+  mongo-init:
+    image: mongo:8.0
+    depends_on:
+      mongodb:
+        condition: service_started
+    restart: on-failure
+    entrypoint: ['mongosh']
+    command:
+      - mongodb://mongodb:27017/admin
+      - --quiet
+      - --eval
+      - >-
+        try { rs.status().ok } catch (error) {
+          rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongodb:27017'}]})
+        }
+    networks:
+      - bookipi-local
+
+  valkey:
+    image: valkey/valkey:8.1-alpine
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    networks:
+      - bookipi-local
+
+  backend:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.backend
+    environment:
+      PORT: 3001
+      BETTER_AUTH_URL: ${LOCAL_BROWSER_ORIGIN:-http://bookipi.localhost:3200}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET for the integration run}
+      MONGODB_URI: mongodb://mongodb:27017/bookipi?replicaSet=rs0
+      MONGODB_DATABASE: bookipi
+      VALKEY_URL: redis://valkey:6379
+      STOREFRONT_ORIGIN: ${LOCAL_BROWSER_ORIGIN:-http://bookipi.localhost:3200}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      SQS_QUEUE_URL: http://localstack:4566/000000000000/bookipi-order-events
+      SQS_ENDPOINT_URL: http://localstack:4566
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    networks:
+      - bookipi-local
+
+  storefront:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.storefront
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${LOCAL_BROWSER_ORIGIN:-http://bookipi.localhost:3200}
+        NEXT_PUBLIC_LISTING_ID: ${NEXT_PUBLIC_LISTING_ID:-listing-seed-001}
+        NEXT_PUBLIC_CHECKOUT_URL: ${LOCAL_BROWSER_ORIGIN:-http://bookipi.localhost:3200}/api/checkout
+    expose:
+      - '3000'
+    networks:
+      - bookipi-local
+
+  caddy:
+    image: caddy:2.10-alpine
+    ports:
+      - '3200:3200'
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - storefront
+      - backend
+      - localstack
+    networks:
+      - bookipi-local
+
+volumes:
+  mongodb-data:
+
+networks:
+  bookipi-local:
+    name: bookipi-local

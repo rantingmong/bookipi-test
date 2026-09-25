@@ -23,13 +23,15 @@ Read [testing-strategy.md](testing-strategy.md) for test layers, invariants, and
 
 Read [implementation-roadmap.md](implementation-roadmap.md) for reviewable increments and implementation choices.
 
+Read [../infra/README.md](../infra/README.md) for the local Caddy and LocalStack test stack. It describes local checks and their limits.
+
 Update the affected document when a decision or boundary changes.
 
 ## Decisions & assumptions
 
 - `system-design.md` is the short source for the master flow and facet map.
 - The facet documents hold detailed architecture decisions and contracts.
-- `testing-strategy.md` defines planned verification, not completed results.
+- `testing-strategy.md` defines current test evidence and planned verification.
 - `implementation-roadmap.md` records the order of work and the choice required for each feature increment.
 - Current guidance stays in document bodies.
 - Dated historical facts stay in each document `Change log` section.
@@ -42,7 +44,7 @@ No document contains benchmark results for this design-only increment.
 
 Mermaid diagrams describe the plan and require validation when the related runtime work starts.
 
-The deployed purchase path is CloudFront to an API Gateway REST API to the checkout Lambda. A REQUEST Lambda authorizer reads Better Auth sessions from Valkey. Express does not proxy the purchase request or invoke Lambda.
+The deployed purchase path is CloudFront to an API Gateway REST API to the checkout Lambda. A separate REQUEST Lambda authorizer reads Better Auth sessions from Valkey. Express does not proxy the purchase request or invoke Lambda. The local test stack uses Caddy as an edge substitute and LocalStack for API Gateway, Lambda, and SQS. The LocalStack `2026.8.4` Hobby prototype did not invoke or enforce the REQUEST authorizer. The local stack uses a combined auth adapter in the checkout processor Lambda. This workaround does not prove deployed CloudFront, AWS, or REQUEST-authorizer behavior.
 
 ## Change log
 

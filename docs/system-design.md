@@ -11,7 +11,7 @@ sequenceDiagram
     participant B as Browser
     participant F as CloudFront
     participant A as API Gateway REST API
-    participant H as REQUEST authorizer
+    participant H as REQUEST authorizer in deployment
     participant L as Checkout Lambda
     participant V as Valkey
     participant Q as SQS Standard
@@ -38,7 +38,9 @@ sequenceDiagram
 
 The browser sends the purchase request directly to the configured CloudFront checkout endpoint. CloudFront routes it through API Gateway to the checkout Lambda. Express does not invoke Lambda or proxy the request.
 
-The API Gateway authorizer checks the Better Auth session in Valkey. MongoDB stores users, credentials, and business data. The authorizer does not call Express or MongoDB.
+The local test stack uses Caddy as its only browser-facing host at `http://bookipi.localhost:3200`. Caddy serves the Node storefront, sends other `/api/*` requests to the Express container, and routes exact `/api/checkout` requests to the LocalStack API Gateway REST API. LocalStack uses the deterministic API ID `bookipi-checkout` and its execute-api hostname. Caddy replaces CloudFront only for local tests. It does not model CloudFront behavior.
+
+In deployment, the API Gateway REQUEST authorizer checks the Better Auth session in Valkey. The local Hobby template uses a combined checkout Lambda adapter because the isolated LocalStack `2026.8.4` Hobby prototype did not invoke or enforce the configured REQUEST authorizer. The local adapter checks Origin and the Better Auth session, then calls `startCheckout` directly with the verified customer ID. It does not build authorizer context or call `handler.ts`. MongoDB stores users, credentials, and business data. Neither checkout path calls Express or MongoDB.
 
 The checkout Lambda reads trusted `customerId` from API Gateway authorizer context. It atomically claims a slot in Valkey and sends `order-reserved.v1` with `orderId`, `customerId`, `listingId`, and `slotId` through SQS. After SQS accepts the event, the payment feature validates `orderId` and returns a relative `/payment?orderId=<encoded id>` redirect. Lambda includes this URL in its HTTP 202 response. SQS is the only Lambda-to-Express bridge. The Express worker persists the order before the mock payment page uses `orderId`.
 
@@ -52,7 +54,7 @@ The storefront reads public listing metadata and slot-derived counts from `GET /
 
 The design has no durable replay for a Lambda crash after the Valkey pop and before SQS accepts the event.
 
-Increment 8 implements the public listing read, direct credentialed storefront checkout, the origin-first REST REQUEST authorizer, and no-store checkout responses with conditional exact-origin CORS. Unit and controlled browser tests cover the local code paths. Deployment must still verify CloudFront cookie and Origin forwarding, checkout caching, authorizer-result caching, and the unauthenticated preflight method. LocalStack does not prove these deployment settings.
+Increment 8 implements the public listing read, direct credentialed storefront checkout, the origin-first REST REQUEST authorizer, and no-store checkout responses with conditional exact-origin CORS. Local integration checks cover the Caddy route, LocalStack API Gateway, combined local adapter, Lambda, SQS, MongoDB persistence, and owner payment flow. The [isolated REQUEST-authorizer prototype](../infra/localstack/prototypes/rest-request-authorizer/) records that LocalStack `2026.8.4` Hobby did not invoke or enforce that authorizer. The combined adapter is a local workaround, not the production architecture and not evidence about AWS behavior. Deployment must still verify CloudFront cookie and Origin forwarding, checkout caching, REQUEST-authorizer invocation and result caching, and the unauthenticated preflight method.
 
 ## Facets
 

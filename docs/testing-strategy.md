@@ -53,15 +53,15 @@ MongoDB integration tests will use a replica set for transaction behavior. They 
 
 Valkey integration tests will cover atomic slot claims and map the client-generated `(listingId, trusted customerId, idempotencyKey)` tuple to a stable `orderId` and `slotId`. They will also cover sale-window boundaries, sold-out behavior, guarded release, and outage behavior.
 
-LocalStack tests will cover SQS delivery, duplicate messages, retry behavior, and acknowledgement timing. MongoDB and SQS integration tests will verify that persistence completes before acknowledgement and that failed or conflicting events remain queued.
+`pnpm test:integration` starts the local Compose stack and stops at the first failed gate. It checks backend health, backend SQS consumption, idempotent seed behavior, storefront delivery, listing access, API Gateway reachability, invalid-session denial, trusted identity replacement, and the full order/payment path. It uses a unique listing with an active sale window in each run. The LocalStack `2026.8.4` Hobby [REQUEST-authorizer prototype](../infra/localstack/prototypes/rest-request-authorizer/) did not invoke or enforce the configured authorizer. The integration stack uses a local-only auth adapter inside the combined checkout Lambda. This workaround does not prove AWS behavior or production REQUEST-authorizer behavior.
 
 ## Browser tests with Playwright
 
-The controlled Playwright tests verify session display, public listing display, direct checkout request fields, credentialed cookie forwarding, sign-in guidance after an explicit unauthenticated response, expired-session revalidation after a readable API Gateway denial, active-session retry after a readable denial, same-key reuse, and navigation to the payment result. They use controlled route responses. They do not prove real sign-in, session authorization, CloudFront, API Gateway, or Valkey behavior.
+The controlled Playwright tests verify session display, public listing display, direct checkout request fields, credentialed cookie forwarding, sign-in guidance after an explicit unauthenticated response, expired-session revalidation after a readable API Gateway denial, active-session retry after a readable denial, same-key reuse, and navigation to the payment result. They use controlled route responses. The full integration suite verifies real local sign-in and session authorization through LocalStack. Neither suite proves deployed CloudFront behavior.
 
 The `/payment?orderId=...` page polls until the SQS worker persists the order. It shows outcome controls only after the authenticated API confirms ownership. Browser tests will verify pending, owner-not-found, request error, success, and cancellation states. Provider callback correlation remains planned work.
 
-Deployment checks must verify CloudFront routing, session-cookie forwarding, `Origin` forwarding, disabled authorizer-result caching, and disabled checkout response caching. Cross-origin deployments must verify credentialed CORS on success and relevant errors, an unauthenticated `OPTIONS` response, and an authorizer-denial API Gateway `GatewayResponse` with the exact allowed Origin and `Access-Control-Allow-Credentials: true`. LocalStack and controlled browser routes do not prove these settings. No deployment configuration or proof exists in this repository.
+Deployment checks must verify CloudFront routing, session-cookie forwarding, `Origin` forwarding, REQUEST-authorizer invocation, disabled authorizer-result caching, and disabled checkout response caching. Cross-origin deployments must verify credentialed CORS on success and relevant errors, an unauthenticated `OPTIONS` response, and an authorizer-denial API Gateway `GatewayResponse` with the exact allowed Origin and `Access-Control-Allow-Credentials: true`. Local Caddy and LocalStack do not prove these settings. This repository has no deployed AWS configuration or proof.
 
 ## Stress tests with k6
 
@@ -88,11 +88,11 @@ k6 will test concurrent claims, repeated idempotency tuples, requests around the
 
 ## Expected results
 
-The current seed creates one listing with `reserveSlots: 2` and ten available slot documents. Reads derive 10 total slots and 8 public slots. The seed publishes Valkey inventory and does not create orders. A repeat run with the same listing ID fails.
+The default seed creates one listing with `reserveSlots: 2` and ten available slot documents. Reads derive 10 total slots and 8 public slots. The seed publishes Valkey inventory and does not create orders. A repeat run with identical facts and state succeeds idempotently. Conflicting facts or inconsistent existing state fail closed. The integration suite uses a unique listing ID and active sale window for each run.
 
 This increment has no measured load values. Later increments will define service targets after the local baseline and deployment shape are known.
 
-Increment 4 and 5 unit tests do not prove atomic Valkey behavior, SQS delivery, or MongoDB persistence before acknowledgement. LocalStack, Valkey concurrency, MongoDB transactions, Lambda deployment, and API Gateway proxy checks remain pending. No deployment or LocalStack proof exists.
+Unit tests do not prove atomic Valkey behavior or MongoDB transaction behavior. The local integration suite verifies the end-to-end reservation and payment path with a MongoDB replica set, Valkey, LocalStack API Gateway, Lambda, and SQS. Valkey concurrency, stress behavior, deployed Lambda, deployed API Gateway, and CloudFront remain unverified.
 
 ## Change log
 
@@ -112,4 +112,8 @@ Increment 4 and 5 unit tests do not prove atomic Valkey behavior, SQS delivery, 
 - Added durable release intent, idempotent Valkey marker, and trigger-driven reconciliation checks. MongoDB and Valkey integration checks remain pending.
 - Added guarded-release failure retry and `failure`/`expired` same-status retry checks.
 - Added public listing status, origin-first authorizer, no-store and conditional CORS, and storefront checkout client tests.
+
+### 2026-09-25
+
+- Added the full-stack LocalStack integration suite through the same-origin local Caddy edge. Deployed CloudFront and AWS behavior remain unverified.
 - Added a controlled Playwright checkout retry test. Deployment integration remains pending.

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   readEnvConfig,
   readListingSeedEnvConfig,
+  readListingSeedOverrides,
   readMongoEnvConfig,
   readOrderWorkerEnvConfig,
 } from '#features/env/feature'
@@ -49,7 +50,17 @@ describe('environment feature', () => {
       mongoDatabase: environment.MONGODB_DATABASE,
       awsRegion: 'ap-southeast-1',
       sqsQueueUrl: 'https://sqs.example/order-events',
+      sqsEndpointUrl: undefined,
     })
+    expect(
+      readOrderWorkerEnvConfig({
+        MONGODB_URI: environment.MONGODB_URI,
+        MONGODB_DATABASE: environment.MONGODB_DATABASE,
+        AWS_REGION: 'ap-southeast-1',
+        SQS_QUEUE_URL: 'http://localstack:4566/000000000000/order-events',
+        SQS_ENDPOINT_URL: 'http://localstack:4566',
+      }).sqsEndpointUrl,
+    ).toBe('http://localstack:4566')
     expect(() =>
       readOrderWorkerEnvConfig({
         MONGODB_URI: environment.MONGODB_URI,
@@ -57,6 +68,20 @@ describe('environment feature', () => {
         AWS_REGION: 'ap-southeast-1',
       }),
     ).toThrow('Missing required environment variable SQS_QUEUE_URL')
+  })
+
+  it('accepts a dynamic sale window and listing ID for integration fixtures', () => {
+    expect(
+      readListingSeedOverrides({
+        DEMO_LISTING_ID: 'integration-sale',
+        DEMO_SALE_STARTS_AT: '2026-09-25T00:00:00.000Z',
+        DEMO_SALE_ENDS_AT: '2026-09-26T00:00:00.000Z',
+      }),
+    ).toEqual({
+      listingId: 'integration-sale',
+      saleStartsAt: '2026-09-25T00:00:00.000Z',
+      saleEndsAt: '2026-09-26T00:00:00.000Z',
+    })
   })
 
   it('requires MongoDB and Valkey settings for the seed command', () => {

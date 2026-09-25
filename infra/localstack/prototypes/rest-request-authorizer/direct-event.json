@@ -1,0 +1,7 @@
+{
+  "type": "REQUEST",
+  "methodArn": "arn:aws:execute-api:ap-southeast-1:000000000000:rest-request-authz-proof/local/GET/probe",
+  "headers": {
+    "x-prototype-token": "allow-probe"
+  }
+}

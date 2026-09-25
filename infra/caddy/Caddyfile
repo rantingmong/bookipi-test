@@ -1,0 +1,18 @@
+:3200 {
+	@checkout path /api/checkout
+	handle @checkout {
+		rewrite * /local/api/checkout
+		reverse_proxy bookipi-checkout.execute-api.localhost.localstack.cloud:4566 {
+			header_up Host bookipi-checkout.execute-api.localhost.localstack.cloud
+		}
+	}
+
+	@api path /api/*
+	handle @api {
+		reverse_proxy backend:3001
+	}
+
+	handle {
+		reverse_proxy storefront:3000
+	}
+}

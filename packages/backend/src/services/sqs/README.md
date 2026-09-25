@@ -13,6 +13,7 @@ The worker long-polls up to ten messages for 20 seconds. The service parses each
 - The event contains `orderId`, `customerId`, `listingId`, and `slotId` facts.
 - A malformed body or missing receipt handle is not acknowledged.
 - The queue deployment owns visibility, retry, and dead-letter settings.
+- Set optional `SQS_ENDPOINT_URL` to the LocalStack endpoint in the local stack. Leave it unset for AWS.
 - The service does not connect to AWS during import.
 
 ## Change log

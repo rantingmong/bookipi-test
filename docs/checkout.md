@@ -37,7 +37,9 @@ sequenceDiagram
     W-->>Q: Acknowledge event
 ```
 
-The browser sends the checkout POST directly to the configured CloudFront endpoint with its Better Auth session cookie and `Origin` header. CloudFront forwards both values to the API Gateway REST API. The REQUEST Lambda authorizer checks `Origin` first. It rejects a missing or unapproved origin without calling Better Auth or reading Valkey. It checks the cookie and session only after the origin passes.
+In deployment, the browser sends the checkout POST directly to the configured CloudFront endpoint with its Better Auth session cookie and `Origin` header. CloudFront forwards both values to the API Gateway REST API. The separate REQUEST Lambda authorizer checks `Origin` first. It rejects a missing or unapproved origin without calling Better Auth or reading Valkey. It checks the cookie and session only after the origin passes.
+
+The LocalStack `2026.8.4` Hobby [prototype](../infra/localstack/prototypes/rest-request-authorizer/) did not invoke or enforce the configured REST REQUEST authorizer. The local template uses `AuthorizationType: NONE` and a combined checkout Lambda adapter. The adapter checks Origin and the Better Auth session, then passes the verified customer ID to the existing checkout domain behavior. It does not construct API Gateway authorizer context. This workaround is local only. It is not the production architecture and does not prove AWS behavior.
 
 Listing IDs use 1 to 128 ASCII letters, digits, underscores, or hyphens. The first character is a letter or digit. This rule keeps the ID inside its Valkey hash tag.
 
@@ -66,7 +68,7 @@ Valkey contains every slot document in one claimable pool. MongoDB derives `stoc
 - Checkout can claim any slot in the one pool. A cancellation returns one slot to that same pool through the existing guarded release.
 - The logical idempotency key is `(listingId, trusted customerId, client idempotencyKey)`. Only the same customer and listing can reuse a binding.
 - MongoDB does not store the client idempotency key. If Valkey loses the binding, checkout fails closed and does not rebuild it from MongoDB.
-- The API Gateway REQUEST Lambda authorizer checks `Origin` before it validates the Better Auth session. It passes trusted `customerId` to Lambda only when both checks pass. The Lambda ignores any browser-supplied `customerId`.
+- The deployed API Gateway REQUEST Lambda authorizer checks `Origin` before it validates the Better Auth session. It passes trusted `customerId` to Lambda only when both checks pass. The Lambda ignores any browser-supplied `customerId`.
 - Better Auth stores sessions in Valkey secondary storage. MongoDB stores users, credentials, and business data. The authorizer does not call Express or MongoDB.
 - Keep `session.storeSessionInDatabase` unset or `false`. A missing Valkey session fails closed and requires a new login.
 - The authorizer uses Better Auth `getSession` with `disableRefresh: true` and `disableCookieCache: true`. It does not refresh an active session. Better Auth may still delete an expired session and return an expiry cookie that the authorizer cannot forward. Normal Express auth responses handle active-session refresh.
@@ -98,7 +100,7 @@ The deployed path does not define a local route, cookie name, or CloudFront path
 
 CloudFront must forward the Better Auth session cookie and `Origin` header. It must not cache checkout responses. Cookie scope, `SameSite`, origin forwarding, and the approved-origin configuration need deployment checks. Test exact-origin credentialed CORS on successful POST and relevant error responses, plus unauthenticated preflight when origins differ.
 
-API Gateway authorizer-result caching must be disabled. Configure an unauthenticated `OPTIONS` method that returns the exact origin and credentials headers. It must allow the required methods and headers. It must not call the checkout authorizer or Lambda. Configure an authorizer-denial `GatewayResponse` that returns the exact allowed `Origin` and `Access-Control-Allow-Credentials: true`. Local unit and browser tests do not prove these CloudFront or API Gateway settings. No deployment configuration or proof exists in this repository.
+Production API Gateway authorizer-result caching must be disabled. Configure an unauthenticated `OPTIONS` method that returns the exact origin and credentials headers. It must allow the required methods and headers. It must not call the checkout authorizer or Lambda. Configure an authorizer-denial `GatewayResponse` that returns the exact allowed `Origin` and `Access-Control-Allow-Credentials: true`. The LocalStack prototype and integration tests do not prove CloudFront or AWS API Gateway settings. No deployment configuration or proof exists in this repository.
 
 See [API Gateway REST Lambda authorizer guidance](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-use-lambda-authorizer.html), [CloudFront origin request guidance](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/controlling-origin-requests.html), and [Better Auth secondary storage guidance](https://better-auth.com/docs/concepts/database).
 

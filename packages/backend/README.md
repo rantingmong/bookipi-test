@@ -20,6 +20,8 @@ Set `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `MONGODB_URI`, `MONGODB_DATABASE`, 
 
 Backend startup requires `AWS_REGION` and `SQS_QUEUE_URL` for the SQS worker, in addition to the backend settings above.
 
+Set optional `SQS_ENDPOINT_URL` to `http://localstack:4566` in the local stack. The seed accepts `DEMO_LISTING_ID`, `DEMO_SALE_STARTS_AT`, and `DEMO_SALE_ENDS_AT` overrides for a unique active integration sale.
+
 The authenticated payment outcome route is available whenever the order routes are configured.
 
 Run `pnpm generate:api` before you start the backend in development. The root `typecheck`, `test`, and `build` scripts generate API code first.
@@ -50,7 +52,7 @@ The worker long-polls up to ten SQS messages for 20 seconds. It validates each b
 
 The feature can add a positive integer number of slots to an existing listing. It preserves `reserveSlots` and the listing fields. It counts current slot documents, inserts only the next sequential slot IDs, and returns derived counts in one transaction. Concurrent additions serialize through a write to the listing timestamp. The unique `{ listingId, slotId }` index also rejects a duplicate slot ID.
 
-Run `pnpm --filter @bookipi/backend seed` to create one deterministic listing with `reserveSlots: 2` and ten available slots. It derives 10 total slots and 8 public slots from slot data. It publishes Valkey inventory through `createListing`. Set `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL` before you run it. A second run with the same listing ID fails.
+Run `pnpm --filter @bookipi/backend seed` to create one deterministic listing with `reserveSlots: 2` and ten available slots. It derives 10 total slots and 8 public slots from slot data. It publishes Valkey inventory through `createListing`. Set `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_URL` before you run it. A second run with identical facts and state succeeds idempotently. Conflicting facts or inconsistent existing state fail closed.
 
 Use the `#app`, `#api/*`, `#features/*`, `#services/*`, and `#types` imports for backend code. The package maps resolve TypeScript source during development and compiled JavaScript after build. Do not edit generated API output.
 
@@ -66,7 +68,7 @@ Express exposes authenticated order reads at `GET /api/orders/{orderId}`. It ret
 
 Express will not invoke Lambda or proxy the purchase request.
 
-The browser will send purchase requests directly to the configured CloudFront checkout endpoint. CloudFront will route them through API Gateway to the checkout Lambda.
+In deployment, CloudFront routes checkout to API Gateway and Lambda. In the local stack, Caddy routes `/api/checkout` to the LocalStack REST API Gateway endpoint. It routes other `/api/*` paths to this backend.
 
 An API Gateway REST REQUEST Lambda authorizer will reject a missing or unapproved `Origin` before it calls Better Auth or reads Valkey. After the origin passes, it will check the Better Auth cookie with Better Auth semantics. It will use `getSession` with `disableRefresh: true` and `disableCookieCache: true`, then pass only trusted `customerId` to Lambda. It will not refresh an active session. Better Auth may still delete an expired session and return an expiry cookie that the authorizer cannot forward.
 
@@ -123,6 +125,8 @@ Standard SQS can deliver duplicate or out-of-order events. The worker upserts or
 The system has no durable replay if Lambda stops after the Valkey pop and before SQS accepts the event. Keep checkout closed when inventory ownership is unclear.
 
 ## Design links
+
+The local integration stack uses a replica-set MongoDB, Valkey, LocalStack SQS and API Gateway, two Node containers, and Caddy. Read [local infrastructure](../../infra/README.md) for commands and limits.
 
 - [System design](../../docs/system-design.md)
 - [Orders](../../docs/orders.md)

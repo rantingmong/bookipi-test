@@ -1,5 +1,6 @@
 import {
   authEnvSchema,
+  listingSeedOverridesSchema,
   listingSeedEnvSchema,
   mongoEnvSchema,
   orderWorkerEnvSchema,
@@ -62,5 +63,17 @@ export function readOrderWorkerEnvConfig(
     mongoDatabase: config.MONGODB_DATABASE,
     awsRegion: config.AWS_REGION,
     sqsQueueUrl: config.SQS_QUEUE_URL,
+    sqsEndpointUrl: config.SQS_ENDPOINT_URL,
+  }
+}
+
+export function readListingSeedOverrides(
+  environment: Environment = process.env,
+) {
+  const config = listingSeedOverridesSchema.parse(environment)
+  return {
+    listingId: config.DEMO_LISTING_ID,
+    saleStartsAt: config.DEMO_SALE_STARTS_AT,
+    saleEndsAt: config.DEMO_SALE_ENDS_AT,
   }
 }

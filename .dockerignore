@@ -1,0 +1,12 @@
+.git
+.localstack
+.env
+.env.*
+node_modules
+**/node_modules
+.next
+**/.next
+**/dist
+.artifacts
+coverage
+**/coverage

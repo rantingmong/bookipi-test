@@ -1,17 +1,69 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CheckoutResult } from '../checkout/feature.js'
 import { responseHeaders } from './constants.js'
-import { checkoutResponse, requestBody, response } from './feature.js'
+import {
+  checkoutResponse,
+  approvedRequestOrigin,
+  eventHeader,
+  isExactHttpOrigin,
+  requestBody,
+  response,
+} from './feature.js'
 
 function event(
   body: string | null,
   isBase64Encoded = false,
+  headers: Record<string, string> = {},
 ): APIGatewayProxyEvent {
-  return { body, isBase64Encoded } as APIGatewayProxyEvent
+  return { body, isBase64Encoded, headers } as APIGatewayProxyEvent
 }
 
 describe('Lambda HTTP helpers', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('reads request headers without depending on their case', () => {
+    expect(
+      eventHeader(
+        {
+          headers: { Origin: 'https://store.example.test' },
+        } as unknown as APIGatewayProxyEvent,
+        'origin',
+      ),
+    ).toBe('https://store.example.test')
+  })
+
+  it('accepts only an exact HTTP origin', () => {
+    expect(isExactHttpOrigin('https://store.example.test')).toBe(true)
+    expect(isExactHttpOrigin('https://store.example.test/path')).toBe(false)
+    expect(isExactHttpOrigin('not an origin')).toBe(false)
+    expect(isExactHttpOrigin(undefined)).toBe(false)
+  })
+
+  it('approves only an exact configured request origin', () => {
+    vi.stubEnv('STOREFRONT_ORIGIN', 'https://store.example.test')
+
+    expect(
+      approvedRequestOrigin(
+        event(null, false, { Origin: 'https://store.example.test' }),
+      ),
+    ).toBe('https://store.example.test')
+    expect(
+      approvedRequestOrigin(
+        event(null, false, { Origin: 'https://store.example.test/path' }),
+      ),
+    ).toBeUndefined()
+
+    vi.stubEnv('STOREFRONT_ORIGIN', 'https://store.example.test/path')
+    expect(
+      approvedRequestOrigin(
+        event(null, false, { Origin: 'https://store.example.test/path' }),
+      ),
+    ).toBeUndefined()
+  })
+
   it('returns a JSON body and content type header', () => {
     expect(response(201, { ok: true })).toEqual({
       statusCode: 201,

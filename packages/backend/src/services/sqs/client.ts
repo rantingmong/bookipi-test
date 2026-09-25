@@ -7,9 +7,15 @@ import {
   SQSClient,
   type SQSClient as SqsSdkClient,
 } from '@aws-sdk/client-sqs'
+import type { SQSClientConfig } from '@aws-sdk/client-sqs'
 
-export function createSqsClient(region: string): SQSClient {
-  return new SQSClient({ region })
+export function createSqsClient(
+  region: string,
+  endpointUrl?: string,
+): SQSClient {
+  const config: SQSClientConfig = { region }
+  if (endpointUrl) config.endpoint = endpointUrl
+  return new SQSClient(config)
 }
 
 export async function receiveSqsMessages(

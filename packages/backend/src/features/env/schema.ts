@@ -77,4 +77,14 @@ export const orderWorkerEnvSchema = z.object({
   MONGODB_DATABASE: requiredEnvValue('MONGODB_DATABASE'),
   AWS_REGION: requiredEnvValue('AWS_REGION'),
   SQS_QUEUE_URL: requiredEnvValue('SQS_QUEUE_URL'),
+  SQS_ENDPOINT_URL: z.preprocess((value) => {
+    if (typeof value !== 'string') return undefined
+    return value.trim() || undefined
+  }, z.string().url().optional()),
+})
+
+export const listingSeedOverridesSchema = z.object({
+  DEMO_LISTING_ID: z.string().min(1).optional(),
+  DEMO_SALE_STARTS_AT: z.iso.datetime().optional(),
+  DEMO_SALE_ENDS_AT: z.iso.datetime().optional(),
 })
