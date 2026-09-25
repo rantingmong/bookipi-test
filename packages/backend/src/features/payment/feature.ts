@@ -1,6 +1,7 @@
 import type { OrderDocument } from '#features/order/types'
 import { paymentOutcomeSchema } from '#features/payment/schema'
-import type { PaymentOrderModel, PaymentOutcome } from '#features/payment/types'
+import type { PaymentOutcome } from '#features/payment/types'
+import type { Models } from '#types'
 
 export { paymentOutcomeSchema }
 
@@ -12,7 +13,7 @@ export class PaymentOutcomeConflictError extends Error {
 }
 
 export async function applyPaymentOutcome(
-  ordersModel: PaymentOrderModel,
+  models: Models,
   orderId: string,
   outcome: PaymentOutcome,
 ): Promise<OrderDocument | null> {
@@ -26,7 +27,7 @@ export async function applyPaymentOutcome(
     update = { $set: { status, releaseStatus: 'PENDING' } }
   }
 
-  const updated = await ordersModel.findOneAndUpdate(
+  const updated = await models.OrdersModel.findOneAndUpdate(
     { orderId, status: 'PENDING' },
     update,
     { returnDocument: 'after' },
@@ -35,7 +36,7 @@ export async function applyPaymentOutcome(
     return updated
   }
 
-  const existing = await ordersModel.findOne({ orderId })
+  const existing = await models.OrdersModel.findOne({ orderId })
   if (!existing) {
     return null
   }

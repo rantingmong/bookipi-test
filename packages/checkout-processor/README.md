@@ -28,11 +28,14 @@ SQS will be the only Lambda-to-Express bridge. The Express worker will persist t
 
 The Lambda returns HTTP 202 with `orderId`, `PENDING`, and a relative `redirectUrl` only after SQS accepts the event. The payment feature creates that redirect from the same UUID order ID. It has no provider, persistent session, network call, or new environment setting. It returns stable JSON errors for invalid input, missing identity, unavailable inventory, and retryable service errors. An SQS failure leaves the Valkey claim in place. A same-key retry attempts publication again and can create the same redirect.
 
+Every response sets `Cache-Control: no-store`. When `STOREFRONT_ORIGIN` is set and the request Origin matches it exactly, the handler adds that origin and `Access-Control-Allow-Credentials: true` to accepted responses and relevant errors. It does not echo an unapproved origin. This package does not handle `OPTIONS`.
+
 ## Decisions & assumptions
 
 - Lambda owns hot-path Valkey reservation and SQS publication.
 - API Gateway supplies trusted identity. Lambda ignores browser-supplied `customerId` values.
 - Runtime settings are `VALKEY_URL` and `ORDER_EVENTS_QUEUE_URL`. The runtime reads them and creates clients on the first valid checkout request. Imports do not read settings or connect services.
+- Set optional `STOREFRONT_ORIGIN` when the browser uses another origin. It must match the authorizer allowlist and backend origin configuration.
 - `src/types.ts` defines the shared checkout and runtime dependency contracts. Request and result types stay with the checkout feature.
 - `src/features/payment` creates a validated relative mock payment redirect. Checkout calls it after reservation publication succeeds.
 - Listing IDs use 1 to 128 ASCII letters, digits, underscores, or hyphens. The first character is a letter or digit so it cannot change the Valkey hash tag.
@@ -53,7 +56,7 @@ The Lambda returns HTTP 202 with `orderId`, `PENDING`, and a relative `redirectU
 
 ## Gotchas
 
-This package has a REST Lambda handler, checkout and inventory features, lazy Valkey and SQS clients, tests, type checks, and a build. It has no deployment file or local URL.
+This package has a REST Lambda handler, checkout and inventory features, lazy Valkey and SQS clients, no-store responses, conditional credentialed CORS, tests, type checks, and a build. It has no deployment file or local URL.
 
 The Express SQS worker consumes the LocalStack queue. This design has no SQS-to-Lambda event source mapping.
 
@@ -96,3 +99,4 @@ The backend listing feature provides the guarded Valkey release method. A future
 - Added the REST Lambda handler, validated runtime settings, and `order-reserved.v1` SQS publication.
 - Added the payment-session redirect after SQS publication and included it in the HTTP 202 response.
 - Added scoped idempotency and the active-customer reservation key.
+- Added no-store response headers and exact-origin credentialed CORS for checkout responses.

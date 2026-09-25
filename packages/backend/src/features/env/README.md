@@ -20,10 +20,10 @@ The demo seed command requires `MONGODB_URI`, `MONGODB_DATABASE`, and `VALKEY_UR
 
 Backend startup also requires `AWS_REGION` and `SQS_QUEUE_URL`. The server starts the SQS worker after MongoDB connects and the order indexes initialize.
 
-`NODE_ENV` and `MOCK_PAYMENT_ENABLED` are optional. Mock payment outcomes are enabled only when `MOCK_PAYMENT_ENABLED=true` and `NODE_ENV` is `development` or `test`. The route stays disabled in every other environment, including when either setting is absent.
+Mock payment outcomes do not require a feature flag.
 
 ## Tests
 
-`feature.test.ts` checks server and demo seed settings, exact-origin validation, and mock payment environment gating.
+`feature.test.ts` checks server and demo seed settings and exact-origin validation.
 
 The worker settings test checks its MongoDB and SQS configuration.

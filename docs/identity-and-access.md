@@ -44,9 +44,11 @@ sequenceDiagram
 
 The browser sends its Better Auth session cookie and `Origin` header to the configured CloudFront checkout endpoint. CloudFront forwards both values to API Gateway.
 
+The storefront maps an explicit checkout `401` or `UNAUTHENTICATED` response to sign-in guidance. If the cross-origin authorizer denial has no readable CORS response, the browser reports a network failure. A readable `403` without a checkout error code is also ambiguous. For either result, the storefront revalidates the Better Auth session. It shows sign-in guidance when the session is absent. It keeps the request retryable when the session remains active or the revalidation request fails. It preserves explicit checkout errors without session revalidation. A retry reuses the same idempotency key.
+
 The storefront sends email/password requests to Express at `/api/auth/*`. Express passes each raw request to Better Auth before JSON parsing. Better Auth stores users and credentials in MongoDB. It stores sessions in Valkey secondary storage with the `bookipi:auth:` prefix. The sign-up page submits a name, email, and password. Better Auth uses its default password policy and auto-signs in after successful sign-up. The login page submits an email and password. Both pages can read the current session and sign out.
 
-The REST API REQUEST Lambda authorizer checks `Origin` first. It rejects a missing or unapproved origin without calling Better Auth or reading Valkey. After the origin passes, it checks the opaque Better Auth cookie with the same Better Auth secret. It reads the session from Valkey secondary storage and applies Better Auth cookie integrity and expiry rules. It passes only the active `customerId` to checkout. Checkout does not use the stored role snapshot.
+The REST API REQUEST Lambda authorizer in `packages/checkout-authorizer` checks `Origin` first. It rejects a missing or unapproved origin before it parses runtime settings or creates its lazy Valkey runtime. A missing cookie also denies without a connection. After these checks, it checks the opaque Better Auth cookie with the same Better Auth secret. It reads the session from Valkey secondary storage and applies Better Auth cookie integrity and expiry rules. It passes only the active `customerId` to checkout. Checkout does not use the stored role snapshot.
 
 Better Auth uses MongoDB for users, accounts, and credentials. It uses Valkey secondary storage for sessions. Keep `session.storeSessionInDatabase` unset or `false`. Better Auth must not fall back to MongoDB when a session is absent from Valkey. A missing or expired Valkey session requires a new login.
 
@@ -56,7 +58,9 @@ Serve auth and checkout under the same host, or keep the checkout hostname withi
 
 If the storefront and checkout origins differ, configure credentialed CORS. Return the exact approved storefront origin in `Access-Control-Allow-Origin`, never `*`, and return `Access-Control-Allow-Credentials: true` on successful POST and relevant error responses. CloudFront must allow and forward `OPTIONS` and its preflight headers. The unauthenticated API Gateway `OPTIONS` method returns the exact origin and credentials headers, plus `Access-Control-Allow-Methods` and `Access-Control-Allow-Headers` for required values. It must not use the checkout POST authorizer or invoke checkout. Same-origin checkout does not require a preflight.
 
-The authorizer is a separate Lambda handler. API Gateway invokes the checkout Lambda only after the authorizer returns the verified identity.
+API Gateway rejects a Deny policy before it invokes the checkout Lambda. For a cross-origin deployment, configure an API Gateway `GatewayResponse` for authorizer denials. It must return the exact allowed `Origin` and `Access-Control-Allow-Credentials: true`. No deployment configuration or proof exists in this repository.
+
+The authorizer is a separate Lambda handler. It has no MongoDB or Express dependency. API Gateway invokes the checkout Lambda only after the authorizer returns the verified identity. Its environment requires `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `STOREFRONT_ORIGIN`, and `VALKEY_URL`.
 
 ## Decisions & assumptions
 
@@ -79,7 +83,7 @@ The authorizer is a separate Lambda handler. API Gateway invokes the checkout La
 - The storefront client sends credentials and reads `NEXT_PUBLIC_API_BASE_URL` at build time.
 - Checkout uses only the active `customerId`. Privileged Express routes must read current roles from MongoDB or invalidate affected sessions after a role change.
 - Valkey loss removes active session state as well as inventory state. Customers must sign in again after session state is lost. The design does not claim durable session storage.
-- The provider-shaped payment callback requires service authentication. The browser can request a mock outcome only for its own order in local or test mode.
+- The provider-shaped payment callback requires service authentication. The browser can request a mock outcome only for its own order after the backend confirms ownership.
 - SQS is the only Lambda-to-Express bridge. The SQS worker persists the immutable payment-session binding.
 
 The selected design follows [API Gateway REST Lambda authorizer guidance](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-use-lambda-authorizer.html), [API Gateway REST CORS guidance](https://docs.aws.amazon.com/apigateway/latest/developerguide/how-to-cors.html), [CloudFront origin request guidance](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/controlling-origin-requests.html), [Better Auth session guidance](https://better-auth.com/docs/concepts/session-management), and [Better Auth secondary storage guidance](https://better-auth.com/docs/concepts/database). The authorizer must use Better Auth session semantics. It must not parse a cookie or query Valkey with a custom session format.
@@ -88,7 +92,7 @@ The selected design follows [API Gateway REST Lambda authorizer guidance](https:
 
 Do not invent a cookie name, local URL, authorization header, CloudFront path prefix, or approved storefront origin.
 
-Verify cookie scope, `SameSite` settings, CloudFront forwarding, the exact-origin allowlist, and REST REQUEST authorizer behavior in the deployed path. If origins differ, test exact-origin credentialed CORS on POST and error responses, plus unauthenticated preflight. LocalStack tests do not prove CloudFront forwarding or deployed authorizer behavior.
+Verify cookie scope, `SameSite` settings, CloudFront forwarding, the exact-origin allowlist, REST REQUEST authorizer behavior, and API Gateway authorizer-denial `GatewayResponse` behavior in the deployed path. If origins differ, test exact-origin credentialed CORS on POST, Lambda errors, authorizer denials, and unauthenticated preflight. LocalStack tests do not prove CloudFront forwarding or deployed authorizer behavior. No deployment configuration or proof exists in this repository.
 
 If Valkey is unavailable, the authorizer denies checkout. It does not query MongoDB. A full Valkey loss requires customers to sign in again after service recovery.
 

@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import PaymentContent from '@/app/payment/parts/content'
+import Content from '@/app/payment/parts/content'
 
 export default function PaymentPage() {
   return (
@@ -10,7 +10,7 @@ export default function PaymentPage() {
         </main>
       }
     >
-      <PaymentContent />
+      <Content />
     </Suspense>
   )
 }

@@ -21,3 +21,5 @@ packages/storefront/next-env.d.ts
 
 # Test output
 coverage/
+packages/storefront/test-results/
+packages/storefront/playwright-report/

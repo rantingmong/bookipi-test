@@ -3,16 +3,15 @@ import {
   reconcileCancelledOrderRelease,
   ReservationFactsConflictError,
 } from '#features/order/feature'
-import type { OrderDocument } from '#features/order/types'
 import {
   acknowledgeSqsMessage,
   parseOrderReservedEvent,
   receiveSqsMessages,
 } from '#services/sqs/client'
 import type { SqsMessage } from '#services/sqs/types'
+import type { Models } from '#types'
 import type { SQSClient } from '@aws-sdk/client-sqs'
 import type { Redis } from 'ioredis'
-import type { Model } from 'mongoose'
 
 export function createWorkerFeature(sqs: SQSClient, queueUrl: string) {
   let stopRequested = false
@@ -34,7 +33,7 @@ export function createWorkerFeature(sqs: SQSClient, queueUrl: string) {
 
 export async function processSqsBatch(
   messages: SqsMessage[],
-  ordersModel: Model<OrderDocument>,
+  models: Models,
   sqs: SQSClient,
   queueUrl: string,
   valkey: Redis,
@@ -49,8 +48,8 @@ export async function processSqsBatch(
     }
 
     try {
-      const order = await applyReservationFacts(ordersModel, event)
-      await reconcileCancelledOrderRelease(order, { ordersModel, valkey })
+      const order = await applyReservationFacts(models, event)
+      await reconcileCancelledOrderRelease(order, { models, valkey })
     } catch (error) {
       if (!(error instanceof ReservationFactsConflictError)) throw error
       reportMessageError(error)

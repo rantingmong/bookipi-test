@@ -1,7 +1,11 @@
+import {
+  getRequestIdentity,
+  getRequestModels,
+} from '#api/middleware/request-context'
 import { HttpError } from '#api/orders/generated/_shared/errors'
 import type { Order } from '#api/orders/generated/models'
-import { getOrdersRequestContext } from '#api/orders/request-context'
 import type { OrderDocument } from '#features/order/types'
+import { findOwnedOrder, OrderNotFoundError } from '#features/order/feature'
 
 export function toOrderResponse(order: OrderDocument): Order {
   if (!order.createdAt || !order.updatedAt) {
@@ -19,13 +23,18 @@ export function toOrderResponse(order: OrderDocument): Order {
 }
 
 export async function getOrder(orderId: string): Promise<Order> {
-  const { identity, ordersModel } = getOrdersRequestContext()
-  const order = await ordersModel.findOne({
-    orderId,
-    customerId: identity.customerId,
-  })
-  if (!order) {
-    throw new HttpError(404, 'Not found')
+  const identity = getRequestIdentity()
+  try {
+    const order = await findOwnedOrder(
+      getRequestModels(),
+      orderId,
+      identity.customerId,
+    )
+    return toOrderResponse(order)
+  } catch (error) {
+    if (error instanceof OrderNotFoundError) {
+      throw new HttpError(404, 'Not found')
+    }
+    throw error
   }
-  return toOrderResponse(order)
 }

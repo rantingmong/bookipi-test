@@ -10,7 +10,7 @@ The SQS worker persists an order with `orderId`, `customerId`, `listingId`, `slo
 
 After SQS accepts the reservation event, the checkout processor starts a payment session. The current payment feature validates the order UUID and returns a relative `/payment?orderId=<encoded id>` redirect. Lambda includes this redirect in the successful HTTP 202 response. A retry can create the same redirect from the same order ID. This mock session has no provider, persistence, or network call.
 
-The page does not show outcome controls before SQS persistence and owner verification. The build must also set `NEXT_PUBLIC_MOCK_PAYMENT_ENABLED=true` to show the controls. A mock success changes `PENDING` to `COMPLETE`. A mock failure or expiry changes `PENDING` to `CANCELLED`. The owner-checked route accepts `success`, `failure`, or `expired` only when `MOCK_PAYMENT_ENABLED=true` and `NODE_ENV` is `development` or `test`. The disabled route returns `404`.
+The page does not show outcome controls before SQS persistence and owner verification. A mock success changes `PENDING` to `COMPLETE`. A mock failure or expiry changes `PENDING` to `CANCELLED`. The owner-checked route accepts `success`, `failure`, or `expired` whenever the backend order routes are configured.
 
 The backend payment feature applies mock outcomes. A repeated request with the same terminal status is safe. Both `failure` and `expired` set `CANCELLED`. A different terminal status returns `409`. Failure or expiry sets `releaseStatus: PENDING` in one atomic document update. The handler calls the order feature to release the slot through guarded Valkey and marks the intent complete only after Valkey confirms success. Provider callback correlation and payment reconciliation remain deferred.
 
@@ -20,7 +20,7 @@ If the process stops after MongoDB stores cancellation and no caller retries, no
 
 - `orderId` is the only payment-page lookup identifier.
 - The checkout processor creates a relative payment redirect after SQS accepts reservation facts.
-- The browser can submit a mock outcome only for its own order in local or test mode.
+- The browser can submit a mock outcome only for its own order after the backend confirms ownership.
 - The page shows success and failure controls only. Tests and internal callers can submit expiry.
 - The order record gains no payment-provider fields.
 - A provider callback route requires service authentication when it is implemented.

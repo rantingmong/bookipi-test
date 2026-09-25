@@ -1,14 +1,56 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createConnection } from 'mongoose'
+import type { Models } from '#types'
 import {
   applyReservationFacts,
+  findOwnedOrder,
+  OrderNotFoundError,
   orderInputSchema,
   orderStatuses,
   reconcileCancelledOrderRelease,
 } from '#features/order/feature'
 import { createOrderModel } from '#features/order/models'
 
+function createModels(OrdersModel: object = {}): Models {
+  return {
+    ListingModel: {},
+    ListingSlotModel: {},
+    OrdersModel,
+  } as unknown as Models
+}
+
 describe('order feature', () => {
+  it('returns an order only when it belongs to the requested customer', async () => {
+    const order = {
+      orderId: 'order-owned',
+      customerId: 'customer-001',
+      listingId: 'listing-001',
+      slotId: 'listing-001:slot:0001',
+      status: 'PENDING',
+    }
+    const findOne = vi.fn(async () => order)
+
+    await expect(
+      findOwnedOrder(
+        createModels({ findOne }),
+        order.orderId,
+        order.customerId,
+      ),
+    ).resolves.toBe(order)
+    expect(findOne).toHaveBeenCalledWith({
+      orderId: order.orderId,
+      customerId: order.customerId,
+    })
+  })
+
+  it('uses one not-found error for absent and non-owned orders', async () => {
+    const findOne = vi.fn(async () => null)
+
+    await expect(
+      findOwnedOrder(createModels({ findOne }), 'order-hidden', 'customer-002'),
+    ).rejects.toBeInstanceOf(OrderNotFoundError)
+  })
+
   it('releases a pending cancelled order and marks it complete after Valkey confirms', async () => {
     const order = {
       orderId: 'order-cancelled',
@@ -22,7 +64,7 @@ describe('order feature', () => {
     const updateOne = vi.fn(async () => ({ modifiedCount: 1 }))
 
     await reconcileCancelledOrderRelease(order, {
-      ordersModel: { updateOne } as never,
+      models: createModels({ updateOne }),
       valkey: { eval: evalScript } as never,
     })
 
@@ -50,7 +92,7 @@ describe('order feature', () => {
         status: 'PENDING',
       },
       {
-        ordersModel: { updateOne } as never,
+        models: createModels({ updateOne }),
         valkey: { eval: evalScript } as never,
       },
     )
@@ -73,7 +115,7 @@ describe('order feature', () => {
           releaseStatus: 'PENDING',
         },
         {
-          ordersModel: { updateOne } as never,
+          models: createModels({ updateOne }),
           valkey: { eval: vi.fn(async () => 0) } as never,
         },
       ),
@@ -96,8 +138,8 @@ describe('order feature', () => {
       .mockResolvedValue({ ...event, status: 'PENDING' } as never)
 
     try {
-      await applyReservationFacts(OrdersModel, event)
-      await applyReservationFacts(OrdersModel, event)
+      await applyReservationFacts(createModels(OrdersModel), event)
+      await applyReservationFacts(createModels(OrdersModel), event)
 
       expect(findOneAndUpdate).toHaveBeenCalledTimes(2)
       for (const call of findOneAndUpdate.mock.calls) {
@@ -137,8 +179,8 @@ describe('order feature', () => {
       slotId: 'listing-001:slot:0001',
     }
 
-    await applyReservationFacts(model as never, event)
-    await applyReservationFacts(model as never, event)
+    await applyReservationFacts(createModels(model), event)
+    await applyReservationFacts(createModels(model), event)
 
     expect(findOneAndUpdate).toHaveBeenCalledTimes(2)
     expect(findOneAndUpdate).toHaveBeenNthCalledWith(
@@ -171,12 +213,15 @@ describe('order feature', () => {
       }),
     )
 
-    const result = await applyReservationFacts({ findOneAndUpdate } as never, {
-      orderId: '8f67179c-73c6-49dc-984c-ed1735549d35',
-      customerId: 'customer-001',
-      listingId: 'listing-001',
-      slotId: 'listing-001:slot:0001',
-    })
+    const result = await applyReservationFacts(
+      createModels({ findOneAndUpdate }),
+      {
+        orderId: '8f67179c-73c6-49dc-984c-ed1735549d35',
+        customerId: 'customer-001',
+        listingId: 'listing-001',
+        slotId: 'listing-001:slot:0001',
+      },
+    )
 
     expect(result.status).toBe('CANCELLED')
     expect(result.releaseStatus).toBe('PENDING')
@@ -204,7 +249,7 @@ describe('order feature', () => {
     )
 
     await expect(
-      applyReservationFacts({ findOneAndUpdate } as never, {
+      applyReservationFacts(createModels({ findOneAndUpdate }), {
         orderId: '8f67179c-73c6-49dc-984c-ed1735549d35',
         customerId: 'customer-002',
         listingId: 'listing-001',

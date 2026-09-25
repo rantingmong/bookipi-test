@@ -6,7 +6,7 @@ This directory contains the planned runtime packages for the flash-sale system.
 
 ## Flow
 
-The storefront sends status and result reads to the Express backend.
+The storefront reads public listing status and customer-owned results from the Express backend.
 
 The browser sends the purchase request directly to the configured CloudFront endpoint. CloudFront routes it through API Gateway to the checkout processor.
 
@@ -14,7 +14,7 @@ The client sends an idempotency key. The checkout processor validates it and Val
 
 The backend SQS worker consumes the event and writes immutable reservation facts to MongoDB. It acknowledges the message after persistence. MongoDB derives listing counts from slot documents.
 
-After SQS accepts the reservation event, the checkout processor creates a relative mock payment redirect from `orderId` and includes it in the HTTP 202 response. The mock payment page uses that order ID after the backend persists the SQS event. The backend checks ownership before it returns the order or applies a local or test payment outcome. Provider callbacks remain planned.
+After SQS accepts the reservation event, the checkout processor creates a relative mock payment redirect from `orderId` and includes it in the HTTP 202 response. The mock payment page uses that order ID after the backend persists the SQS event. The backend checks ownership before it returns the order or applies a payment outcome. Provider callbacks remain planned.
 
 The backend order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. The payment feature changes `PENDING` to `COMPLETE` or `CANCELLED`. The order feature reconciles durable cancellation release intents through guarded Valkey operations after reservation and payment outcomes. Provider reconciliation remains planned.
 
@@ -29,17 +29,18 @@ Standard SQS can duplicate and reorder events. The worker processes them idempot
 - `backend` owns Express API behavior, Better Auth, listing and slot models, order storage, and durable persistence. MongoDB stores users and credentials; Better Auth sessions use Valkey secondary storage. Listing creation seeds, verifies, and publishes its Valkey pool after the MongoDB transaction commits.
 - `backend` uses Node.js 24, NodeNext TypeScript, and `tsx` for development. Its source uses the `#app`, `#api/*`, `#features/*`, `#services/*`, and `#types` package imports.
 - `storefront` owns the Next.js user interface. Shared payment order state lives in `src/lib/features`; page content lives in page-local `parts` directories.
+- `storefront` reads `GET /api/listings/{listingId}` through a tracked generated-client wrapper. It sends checkout directly to `NEXT_PUBLIC_CHECKOUT_URL` with credentials. One idempotency key stays active for retries of that attempt.
 - `checkout-processor` owns REST Lambda request handling, hot-path reservation, payment redirect creation, and SQS publication. Its inventory feature atomically claims slots with scoped idempotency and one active order per customer and listing. It stores tuple and order data in listing-scoped hashes. The backend listing feature owns guarded cancellation release and clears the matching active-customer hash field.
-- `backend` owns the Express SQS worker, authenticated order reads, and the payment feature for local or test outcome transitions.
+- `backend` owns the Express SQS worker, authenticated order reads, and payment outcome transitions.
 - Express does not invoke Lambda or proxy the purchase request. API Gateway REST API uses a REQUEST authorizer that reads sessions from Valkey.
-- `checkout-authorizer` owns the separate API Gateway REST REQUEST authorizer.
+- `checkout-authorizer` owns the API Gateway REST REQUEST authorizer. It checks Origin before its lazy Better Auth and Valkey session runtime. It returns only trusted `customerId`.
 - Valkey scopes idempotency by listing, authorizer-derived customer, and client key.
 - All packages use TypeScript and ECMAScript modules.
-- Increment 1 adds runtime bootstraps for the backend and storefront. Increment 2 adds email/password authentication and listing/order model foundations. Increment 3 adds verified Valkey publication and guarded inventory methods. Increment 4 adds the checkout Lambda handler and SQS publication. Increment 5 adds the Express SQS consumer and durable reservation facts. Increment 6 adds the static mock payment page, the payment-session redirect, owner-checked order routes, and payment outcomes. Increment 7 adds durable cancellation release and bounded worker retries. Sale routes and provider reconciliation remain planned.
+- Increment 1 adds runtime bootstraps for the backend and storefront. Increment 2 adds email/password authentication and listing/order model foundations. Increment 3 adds verified Valkey publication and guarded inventory methods. Increment 4 adds the checkout Lambda handler and SQS publication. Increment 5 adds the Express SQS consumer and durable reservation facts. Increment 6 adds the static mock payment page, the payment-session redirect, owner-checked order routes, and payment outcomes. Increment 7 adds durable cancellation release and bounded worker retries. Increment 8 adds public listing status and the direct storefront purchase flow. Provider reconciliation remains planned.
 
 ## Gotchas
 
-The backend exposes the system health contract, Better Auth email/password routes, and owner-checked order routes. Mock outcomes require an explicit local or test setting. It also has listing, slot, and order models with a deterministic listing seed that calls `createListing`. Listing creation publishes a verified Valkey inventory pool. Its SQS worker consumes reservation facts, but it has no listing or checkout routes. The checkout processor has a REST Lambda handler and SQS publisher, but no deployed Lambda or queue.
+The backend exposes the system health contract, public listing status, Better Auth email/password routes, and owner-checked order routes. The payment outcome route is available whenever the order routes are configured. It also has listing, slot, and order models with a deterministic listing seed that calls `createListing`. Listing creation publishes a verified Valkey inventory pool. Its SQS worker consumes reservation facts. The checkout processor has a REST Lambda handler and SQS publisher, but no deployed Lambda or queue.
 
 Do not add package scripts until the related runtime exists and its command is verified.
 
@@ -80,3 +81,4 @@ Read each package README before changing that package.
 - Added authenticated order reads and local or test mock outcomes for the static payment page.
 - Added payment feature boundaries and the checkout response redirect to the mock payment page.
 - Added trigger-driven cancellation release reconciliation and guarded Valkey marker recovery.
+- Added the public listing route, direct storefront checkout, and the Valkey-backed REQUEST authorizer.

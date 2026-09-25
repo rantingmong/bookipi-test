@@ -1,18 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { signUpEmail, signInEmail, signOut, createAuthClient } = vi.hoisted(
-  () => {
+const { signUpEmail, signInEmail, signOut, createAuthClient, sessionAtom } =
+  vi.hoisted(() => {
     const signUpEmail = vi.fn()
     const signInEmail = vi.fn()
     const signOut = vi.fn()
+    const sessionAtom = { get: vi.fn() }
     const createAuthClient = vi.fn(() => ({
       signUp: { email: signUpEmail },
       signIn: { email: signInEmail },
       signOut,
+      $store: { atoms: { session: sessionAtom } },
     }))
-    return { signUpEmail, signInEmail, signOut, createAuthClient }
-  },
-)
+    return { signUpEmail, signInEmail, signOut, createAuthClient, sessionAtom }
+  })
 
 vi.mock('better-auth/react', () => ({ createAuthClient }))
 
@@ -21,6 +22,7 @@ import {
   signIn as signInUser,
   signOut as signOutUser,
   signUp,
+  revalidateCurrentSession,
 } from './auth.client.js'
 
 describe('auth client', () => {
@@ -28,6 +30,7 @@ describe('auth client', () => {
     signUpEmail.mockClear()
     signInEmail.mockClear()
     signOut.mockClear()
+    sessionAtom.get.mockReset()
   })
 
   it('normalizes the API origin and includes browser credentials', () => {
@@ -65,5 +68,23 @@ describe('auth client', () => {
       password: 'password123',
     })
     expect(signOut).toHaveBeenCalledOnce()
+  })
+
+  it('revalidates the Better Auth session and returns its current state', async () => {
+    const refetch = vi.fn().mockResolvedValue(undefined)
+    let sessionData: { user: { id: string } } | null = {
+      user: { id: 'customer-1' },
+    }
+    sessionAtom.get.mockImplementation(() => ({
+      refetch,
+      data: sessionData,
+    }))
+
+    await expect(revalidateCurrentSession()).resolves.toBe(true)
+    expect(refetch).toHaveBeenCalledOnce()
+
+    sessionData = null
+    await expect(revalidateCurrentSession()).resolves.toBe(false)
+    expect(refetch).toHaveBeenCalledTimes(2)
   })
 })

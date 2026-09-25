@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createWorkerFeature, processSqsBatch } from '#features/worker/feature'
+import type { Models } from '#types'
+
+function createModels(OrdersModel: object): Models {
+  return {
+    ListingModel: {},
+    ListingSlotModel: {},
+    OrdersModel,
+  } as unknown as Models
+}
 
 const event = {
   eventType: 'order-reserved.v1',
@@ -33,7 +42,7 @@ describe('order reservation worker', () => {
 
     await processSqsBatch(
       [{ body: JSON.stringify(event), receiptHandle: 'valid' }],
-      { findOneAndUpdate, updateOne } as never,
+      createModels({ findOneAndUpdate, updateOne }),
       { send } as never,
       'https://sqs.example/order-events',
       { eval: evalScript } as never,
@@ -54,7 +63,7 @@ describe('order reservation worker', () => {
     await expect(
       processSqsBatch(
         [{ body: JSON.stringify(event), receiptHandle: 'retry' }],
-        { findOneAndUpdate, updateOne: vi.fn() } as never,
+        createModels({ findOneAndUpdate, updateOne: vi.fn() }),
         { send } as never,
         'https://sqs.example/order-events',
         { eval: vi.fn(async () => 0) } as never,
@@ -89,7 +98,7 @@ describe('order reservation worker', () => {
           { body: JSON.stringify(event), receiptHandle: 'conflict' },
           { body: JSON.stringify(event), receiptHandle: 'valid' },
         ],
-        { findOneAndUpdate } as never,
+        createModels({ findOneAndUpdate }),
         { send } as never,
         'https://sqs.example/order-events',
         { eval: vi.fn(async () => 1) } as never,

@@ -11,6 +11,12 @@ export const authClient = createAuthClient(
   createAuthClientOptions(process.env.NEXT_PUBLIC_API_BASE_URL),
 )
 
+export async function revalidateCurrentSession() {
+  const sessionAtom = authClient.$store.atoms.session
+  await sessionAtom.get().refetch()
+  return Boolean(sessionAtom.get().data)
+}
+
 export function signUp(name: string, email: string, password: string) {
   return authClient.signUp.email({ name, email, password })
 }

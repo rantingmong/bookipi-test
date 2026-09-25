@@ -109,36 +109,4 @@ describe('environment feature', () => {
       }).storefrontOrigin,
     ).toBe('https://store.example.test')
   })
-
-  it('enables mock outcomes only with an explicit non-production setting', () => {
-    expect(
-      readEnvConfig({
-        ...environment,
-        NODE_ENV: 'development',
-        MOCK_PAYMENT_ENABLED: 'true',
-      }).mockPaymentEnabled,
-    ).toBe(true)
-    expect(
-      readEnvConfig({
-        ...environment,
-        NODE_ENV: 'test',
-        MOCK_PAYMENT_ENABLED: 'true',
-      }).mockPaymentEnabled,
-    ).toBe(true)
-    expect(
-      readEnvConfig({
-        ...environment,
-        NODE_ENV: 'production',
-        MOCK_PAYMENT_ENABLED: 'true',
-      }).mockPaymentEnabled,
-    ).toBe(false)
-    expect(
-      readEnvConfig({
-        ...environment,
-        NODE_ENV: 'staging',
-        MOCK_PAYMENT_ENABLED: 'true',
-      }).mockPaymentEnabled,
-    ).toBe(false)
-    expect(readEnvConfig(environment).mockPaymentEnabled).toBe(false)
-  })
 })

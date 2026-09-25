@@ -1,7 +1,7 @@
+import { releaseCancelledSlot } from '#features/listing/feature'
 import { orderInputSchema } from '#features/order/schema'
 import type { OrderDocument, ReservationFacts } from '#features/order/types'
-import { releaseCancelledSlot } from '#features/listing/feature'
-import type { Model } from 'mongoose'
+import type { Models } from '#types'
 import type { Redis } from 'ioredis'
 export { orderStatuses } from '#features/order/constants'
 export { orderInputSchema }
@@ -17,12 +17,29 @@ export class ReservationFactsConflictError extends Error {
   }
 }
 
+export class OrderNotFoundError extends Error {
+  constructor(orderId: string) {
+    super(`Order ${orderId} was not found for this customer`)
+    this.name = 'OrderNotFoundError'
+  }
+}
+
+export async function findOwnedOrder(
+  models: Models,
+  orderId: string,
+  customerId: string,
+): Promise<OrderDocument> {
+  const order = await models.OrdersModel.findOne({ orderId, customerId })
+  if (!order) throw new OrderNotFoundError(orderId)
+  return order
+}
+
 export async function applyReservationFacts(
-  ordersModel: Pick<Model<OrderDocument>, 'findOneAndUpdate'>,
+  models: Models,
   facts: ReservationFacts,
 ): Promise<OrderDocument> {
   const updatedAt = new Date()
-  const order = await ordersModel.findOneAndUpdate(
+  const order = await models.OrdersModel.findOneAndUpdate(
     { orderId: facts.orderId },
     { $setOnInsert: { ...facts, status: 'PENDING', updatedAt } },
     {
@@ -52,7 +69,7 @@ export async function applyReservationFacts(
 export async function reconcileCancelledOrderRelease(
   order: OrderDocument,
   dependencies: {
-    ordersModel: Pick<Model<OrderDocument>, 'updateOne'>
+    models: Models
     valkey: Redis
   },
 ): Promise<void> {
@@ -68,7 +85,7 @@ export async function reconcileCancelledOrderRelease(
   if (!released)
     throw new Error(`Guarded slot release failed for order ${order.orderId}`)
 
-  await dependencies.ordersModel.updateOne(
+  await dependencies.models.OrdersModel.updateOne(
     {
       orderId: order.orderId,
       status: 'CANCELLED',

@@ -25,6 +25,7 @@ function request(
   body: string | null,
   customerId?: unknown,
   isBase64Encoded = false,
+  origin?: string,
 ): APIGatewayProxyEvent {
   let authorizer: Record<string, unknown> | undefined
   if (customerId !== undefined) {
@@ -33,6 +34,7 @@ function request(
   return {
     body,
     isBase64Encoded,
+    headers: origin ? { Origin: origin } : {},
     requestContext: { authorizer },
   } as APIGatewayProxyEvent
 }
@@ -205,5 +207,37 @@ describe('checkout Lambda REST handler', () => {
     })
     expect(evalMock).not.toHaveBeenCalled()
     expect(sendMock).not.toHaveBeenCalled()
+  })
+
+  it('sets no-store and exact-origin credentialed CORS headers on checkout results', async () => {
+    process.env.STOREFRONT_ORIGIN = 'https://store.example.test'
+    const result = await handler(
+      request(
+        '{"listingId":"sale-1","idempotencyKey":"key-1"}',
+        'customer-1',
+        false,
+        'https://store.example.test',
+      ),
+    )
+    expect(result.headers).toMatchObject({
+      'cache-control': 'no-store',
+      'access-control-allow-origin': 'https://store.example.test',
+      'access-control-allow-credentials': 'true',
+      vary: 'Origin',
+    })
+  })
+
+  it('does not echo unapproved request origins', async () => {
+    process.env.STOREFRONT_ORIGIN = 'https://store.example.test'
+    const result = await handler(
+      request(
+        '{"listingId":"sale-1","idempotencyKey":"key-1"}',
+        'customer-1',
+        false,
+        'https://other.example.test',
+      ),
+    )
+    expect(result.headers).toMatchObject({ 'cache-control': 'no-store' })
+    expect(result.headers).not.toHaveProperty('access-control-allow-origin')
   })
 })

@@ -44,13 +44,15 @@ The checkout Lambda reads trusted `customerId` from API Gateway authorizer conte
 
 The client creates the idempotency key. Valkey maps `(listingId, trusted customerId, client idempotencyKey)` to `orderId` and `slotId`. MongoDB does not store the client key. A duplicate SQS event upserts by unique `orderId`.
 
-The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. `orderId` is the checkout-attempt and slot-owner identifier. The backend payment feature applies local or test outcomes. Cancellation stores a pending release intent atomically with `CANCELLED`. The order feature reconciles it after each reservation upsert or payment outcome. A process stop after cancellation has no background sweep; SQS retries an unacknowledged trigger, and the payment caller retries a failed or interrupted request. Provider callback correlation and payment reconciliation remain planned work.
+The order model stores `orderId`, `customerId`, `listingId`, `slotId`, `status`, optional `releaseStatus`, and timestamps. `orderId` is the checkout-attempt and slot-owner identifier. The backend payment feature applies mock outcomes when its order routes are configured. Cancellation stores a pending release intent atomically with `CANCELLED`. The order feature reconciles it after each reservation upsert or payment outcome. A process stop after cancellation has no background sweep; SQS retries an unacknowledged trigger, and the payment caller retries a failed or interrupted request. Provider callback correlation and payment reconciliation remain planned work.
 
 The listing document stores identity, display name, sale window, and `reserveSlots`. The initial slot count is an operation parameter. MongoDB derives total stock from slot documents and derives public stock by subtracting `reserveSlots`. Valkey holds the live availability pool.
 
+The storefront reads public listing metadata and slot-derived counts from `GET /api/listings/{listingId}`. This read does not expose slot IDs or claim that `publicStock` is live remaining stock. Checkout errors from the Valkey claim determine sold-out state.
+
 The design has no durable replay for a Lambda crash after the Valkey pop and before SQS accepts the event.
 
-Increment 4 implements the REST Lambda handler, tuple-scoped Valkey claim, and SQS publisher. LocalStack and deployment checks remain pending.
+Increment 8 implements the public listing read, direct credentialed storefront checkout, the origin-first REST REQUEST authorizer, and no-store checkout responses with conditional exact-origin CORS. Unit and controlled browser tests cover the local code paths. Deployment must still verify CloudFront cookie and Origin forwarding, checkout caching, authorizer-result caching, and the unauthenticated preflight method. LocalStack does not prove these deployment settings.
 
 ## Facets
 
