@@ -92,6 +92,22 @@ The production REST API authorizer uses `packages/checkout-authorizer`. The loca
 
 Read the design documents before runtime implementation.
 
+## Future improvements
+
+1. Break down the page state hooks to:
+    a. Be closer to the component its loading
+    b. Mutations are also defined close to the component its affecting
+2. Remove excessive data-[...] attribute class selector in favor of standard react conditionals
+    a. I only placed it there originally intending for elements whose parent state changes (eg: loading button, optional error message)
+3. Add a deployment script for the resources
+    a. Currently the stack demonstrates writing a cloudformation config, but for localstack and not for AWS
+    b. Localstack Hobby plans does not support API gateway v2 HTTP, which we need for
+    c. The lambda authorizer is currenlty shoehorned into the checkout processor, which is not ideal (but for local it works)
+4. Have implemented a more robust approach for resumable checkout processing
+    a. Can use kafka here to log certain checkpoints
+    b. Or use dynamodb streams which are durable (until consumed)
+5. Have redis run in not just one instance but multiple instances, same with mongodb.
+
 ## Gotchas
 
 The home page shows the configured listing and current session. It sends checkout directly to `NEXT_PUBLIC_CHECKOUT_URL` and reuses one idempotency key after request failure. Sign-up, login, and mock payment pages provide the account and payment flow. The checkout processor handles REST proxy requests, claims inventory in Valkey, publishes `order-reserved.v1` to SQS, then creates the payment redirect. Backend startup requires `AWS_REGION` and `SQS_QUEUE_URL` and starts the SQS worker after MongoDB indexes initialize.
