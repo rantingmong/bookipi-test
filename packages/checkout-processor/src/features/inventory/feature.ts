@@ -1,6 +1,16 @@
 import type { Redis } from 'ioredis'
 
 const claimSlotScript = `
+-- KEYS[1]: sale metadata hash.
+-- KEYS[2]: available slot list.
+-- KEYS[3]: idempotency hash.
+-- KEYS[4]: active customer hash.
+-- KEYS[5]: order data hash.
+-- ARGV[1]: raw customer ID.
+-- ARGV[2]: listing ID.
+-- ARGV[3]: candidate order ID for a new reservation.
+-- ARGV[4]: encoded customer ID used as the active customer field.
+-- ARGV[5]: encoded client idempotency key.
 local idempotencyField = ARGV[4] .. ':' .. ARGV[5]
 local idempotencyOrderId = redis.call('HGET', KEYS[3], idempotencyField)
 if idempotencyOrderId then

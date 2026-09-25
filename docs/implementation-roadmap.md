@@ -18,14 +18,16 @@ Update the affected README and design document when a decision changes.
 
 - Increment 0 records the system design.
 - Increment 1 is complete.
-- Increment 2 implementation and focused verification are complete. Integration evidence remains pending.
-- Increment 3 implements listing publication and inventory methods. Sale routes remain planned.
-- Increment 4 implementation, local verification, and internal reviews are complete. Integration and deployment evidence remain pending.
-- Increment 5 implementation and local verification are complete. AWS SQS and MongoDB integration evidence remain pending.
+- Increment 2 has local MongoDB and Valkey sign-up, session, and seed integration evidence. Cookie expiry, revocation, and deployment checks remain pending.
+- Increment 3 has local seed, publication, and listing-status read integration evidence. Concurrent slot-growth integration remains unverified.
+- Increment 4 has local API Gateway, Lambda, Valkey, and SQS checkout integration evidence. The local load benchmark has two passing profiles and one failed profile. Deployment and crash-gap recovery remain unverified.
+- Increment 5 has local SQS consume, MongoDB persistence, and acknowledgement evidence. AWS deployment, retry, and dead-letter behavior remain pending.
+- Increment 6 has controlled browser evidence and a local owner payment flow through MongoDB and SQS. Provider behavior and deployment remain pending.
+- Increment 7 has manual browser evidence that the purchase count does not increase after cancellation. Automated MongoDB and Valkey cancellation-release integration remains unverified.
 - The deployed stack uses CloudFront, API Gateway, Lambda, MongoDB, and Valkey. The local test stack uses Caddy as a same-origin edge and LocalStack for API Gateway, Lambda, and SQS.
 - The production API Gateway REST API uses `packages/checkout-authorizer` for its separate REQUEST Lambda authorizer. It checks Better Auth sessions in Valkey. The LocalStack Hobby template uses a local-only combined adapter because its isolated `2026.8.4` prototype did not invoke or enforce a REQUEST authorizer.
 - Each future feature needs a user review before implementation if its angles change behavior or system boundaries.
-- Increment 1 provides the first runtime bootstrap. Increment 2 adds authentication and the durable listing/order model foundation. Increment 3 adds listing publication and inventory methods. Sale routes remain planned.
+- Increment 1 provides the first runtime bootstrap. Increment 2 adds authentication and the durable listing/order model foundation. Increment 3 adds listing publication and inventory methods. Increment 4 adds checkout handling. Increment 6 adds mock payment outcomes. Increment 8 adds public listing status and direct storefront checkout. Admin behavior and order seeding remain planned.
 
 ## Increment 0: repository shell and design record
 
@@ -59,23 +61,23 @@ Verification: package metadata validation, API generation, TypeScript checks, co
 
 ## Increment 2: Better Auth and listing setup
 
-Status: implementation and focused verification complete; integration evidence remains pending.
+Status: implementation and focused verification complete. Local MongoDB and Valkey sign-up, session, and seed integration evidence is recorded.
 
 Angle A: keep Better Auth, listing creation, and seed orchestration in Express. Store Better Auth users and credentials in MongoDB, and sessions in Valkey secondary storage.
 
 Angle B: isolate authentication or listing setup into separate services.
 
-Selection recorded by this design: Angle A with Valkey secondary storage for sessions and MongoDB for users and credentials. This increment implements email/password sign-up, login, session display, and sign-out. It also validates listing setup, transactionally creates and extends durable listing slots, defines the minimal durable order model, and provides a deterministic listing seed command. Increment 3 adds listing publication and Valkey state. Admin behavior, sale routes, order transitions, and order seeding remain planned.
+Selection recorded by this design: Angle A with Valkey secondary storage for sessions and MongoDB for users and credentials. This increment implements email/password sign-up, login, session display, and sign-out. It also validates listing setup, transactionally creates and extends durable listing slots, defines the minimal durable order model, and provides a deterministic listing seed command. Increment 3 adds listing publication and Valkey state. Increment 4 adds checkout handling. Increment 6 adds mock payment outcome transitions. Increment 8 adds the public listing-status read. Admin behavior and order seeding remain planned.
 
 Reason: one backend boundary reduces coordination for the small take-home while keeping the hot path in Lambda.
 
-Authentication verification: focused tests cover required settings, storage selection, no MongoDB session fallback, session identity mapping, raw Express request ordering, and credentialed browser requests. Model tests cover listing validation, transactional slot creation and growth, and order indexes. Increment 3 changes the demo seed to call `createListing`; identical facts and state succeed idempotently, while conflicting facts or inconsistent existing state fail closed. MongoDB integration, cookie expiry, revocation, sale reads, and deployment authorizer checks remain pending. The separate authorizer makes no Express or MongoDB request.
+Authentication verification: focused tests cover required settings, storage selection, no MongoDB session fallback, session identity mapping, raw Express request ordering, and credentialed browser requests. The local integration suite verifies sign-up and session cookies. It also verifies idempotent seed state and rejects conflicting seed facts without changing state. Model tests cover listing validation, transactional slot creation and growth, and order indexes. Cookie expiry, revocation, and deployment authorizer checks remain pending. The separate authorizer makes no Express or MongoDB request.
 
 Listing setup stores listing identity, display name, sale window, and `reserveSlots`. It accepts a positive integer `initialSlotCount` as an operation parameter and requires `initialSlotCount >= reserveSlots`. It stores no stock count. Derive `stockTotal` by counting slot documents and `publicStock = stockTotal - reserveSlots`.
 
 ## Increment 3: Valkey seed and sale status
 
-Status: implemented as listing creation publication and inventory methods. Sale status reads remain planned.
+Status: local seed, Valkey publication, and listing-status read integration evidence is recorded. Concurrent slot-growth integration remains unverified.
 
 Angle A: seed Valkey synchronously and publish only after verification.
 
@@ -85,7 +87,7 @@ Selection recorded by this design: Angle A.
 
 Reason: a failed seed must fail closed instead of exposing a partially available sale.
 
-Verification: focused tests cover seed counts, publication state, sale-window checks, atomic slot claims, and guarded release. A local Valkey smoke check covers seed, unique claims, sold out, release, and reclaim. MongoDB integration and status reads remain planned.
+Verification: focused tests cover seed counts, publication state, sale-window checks, atomic slot claims, and guarded release. The local integration suite verifies seed publication and a listing-status read. It does not verify concurrent slot growth or cancellation release.
 
 Seed every slot document into one Valkey pool. Verify examples: 15 total slots and 5 reserve gives public count 10; 10 total slots and 2 reserve gives public count 8. Verify that publication fails if the seed count does not equal the slot-document count.
 
@@ -93,7 +95,7 @@ This increment also adds the first checkout-processor feature: an atomic slot po
 
 ## Increment 4: checkout request and SQS publication
 
-Status: implementation, local verification, and internal reviews complete; integration and deployment evidence remain pending.
+Status: local API Gateway, Lambda, Valkey, and SQS checkout integration evidence is recorded. The local load benchmark has two passing profiles and one failed profile. Deployment and crash-gap recovery remain unverified.
 
 Angle A: Lambda owns atomic Valkey reservation and SQS publication.
 
@@ -105,13 +107,13 @@ Selection recorded by this design: Angle A.
 
 Reason: the hot path stays close to Valkey and scales independently from durable reads and writes.
 
-Unit verification covers request validation, trusted identity, atomic claim outcomes, stable same-key binding, best-effort publish retry, and the `order-reserved.v1` event shape. Valkey concurrency, no-oversell behavior, duplicate delivery, LocalStack publication, deployment, and the documented crash gap still need integration or deployment evidence.
+Unit verification covers request validation, trusted identity, atomic claim outcomes, stable same-key binding, best-effort publish retry, and the `order-reserved.v1` event shape. The local integration suite verifies API Gateway reachability, invalid-session rejection by the combined local Lambda, trusted identity, SQS persistence, and the owner payment path. The k6 benchmark provides concurrent inventory evidence for its exact profiles in Increment 9. Deployment and recovery from the documented Valkey-pop-to-SQS crash gap remain unverified.
 
 The atomic claim pops any one slot from the shared pool. The reserve count does not route claims. Reject checkout as sold out only when Valkey has no claimable slots. At most as many orders can reach `COMPLETE` as there are slot documents. Verify ten customers can complete with ten slots and `reserveSlots: 2`, then verify an 11th customer receives a sold-out result while the sale remains active.
 
 ## Increment 5: durable reservation facts
 
-Status: implemented and locally verified. AWS SQS and MongoDB integration evidence remain pending.
+Status: local SQS-to-MongoDB consume, persistence, and acknowledgement evidence is recorded. AWS deployment, retry, and dead-letter behavior remain pending.
 
 Angle A: let the Express SQS worker upsert minimal order fields directly into MongoDB by `orderId`.
 
@@ -121,13 +123,13 @@ Selection recorded by this design: Angle A.
 
 Reason: the selected path keeps the first implementation small while the unique `orderId` index makes event replay idempotent.
 
-Unit verification covers worker settings, strict event validation, SQS long polling and acknowledgement commands, idempotent order upsert, terminal-status preservation, and conflict rejection. AWS SQS delivery, MongoDB persistence before acknowledgement, retry, and dead-letter behavior remain pending integration or deployment checks.
+Unit verification covers worker settings, strict event validation, SQS long polling and acknowledgement commands, idempotent order upsert, terminal-status preservation, and conflict rejection. The local integration suite verifies SQS consumption, MongoDB persistence before acknowledgement, and queue acknowledgement. AWS deployment, retry, and dead-letter behavior remain pending.
 
 The worker long-polls SQS directly. It stores `orderId`, `customerId`, `listingId`, and `slotId` as immutable reservation facts, then acknowledges the message. It does not reset an existing order status. A conflicting event stays unacknowledged for queue redrive handling.
 
 ## Increment 6: mock payment session and page
 
-Status: implemented and locally verified. Browser, MongoDB, SQS, and deployment evidence remain pending.
+Status: controlled browser tests and a local successful owner payment flow through MongoDB and SQS are recorded. Provider behavior and deployment remain pending.
 
 Angle A: add a Next.js mock payment page with success and failure buttons, and create its payment redirect in the checkout processor after SQS accepts reservation facts. The page uses `orderId` after the SQS worker persists the order.
 
@@ -137,11 +139,11 @@ Selection recorded by this design: Angle A. Lambda creates `orderId` before the 
 
 Reason: the page uses the existing order identity without adding a second local service.
 
-Local verification covers API generation, order reads, owner checks, route availability when order routes are configured, payment redirect creation, success, failure, expiry, same-terminal-status retries, conflicting outcomes, the storefront client wrapper, type checks, package tests, static export, formatting, and diff checks. Provider callbacks remain outside this increment.
+Local verification covers API generation, order reads, owner checks, route availability when order routes are configured, payment redirect creation, success, failure, expiry, same-terminal-status retries, conflicting outcomes, the storefront client wrapper, type checks, package tests, static export, formatting, and diff checks. Controlled Playwright tests cover browser payment navigation. The local integration suite verifies a successful owner payment after SQS persistence. Provider behavior and deployment remain outside this increment.
 
 ## Increment 7: unified order reconciliation and durable slot release
 
-Status: implemented and locally verified. MongoDB and Valkey integration evidence remains pending.
+Status: implemented and locally verified. Manual browser verification shows that the purchase count does not increase after cancellation. Automated MongoDB and Valkey cancellation-release integration remains unverified.
 
 Angle A: apply payment outcomes to the order status after the SQS worker persists the order. Use `orderId` as the slot owner and return a cancelled slot through a guarded Valkey release.
 
@@ -151,11 +153,11 @@ Selection recorded by this design: Angle A.
 
 Reason: order status and slot ownership use one stable order identifier.
 
-Local verification covers duplicate SQS events, status transitions, cancellation release intents, trigger-driven reconciliation after SQS and payment outcomes, and marker idempotency. MongoDB and Valkey integration must still verify ownership, duplicate release, new checkout after cancellation, and active partial-index behavior. There is no background release sweep. SQS retries when reconciliation fails before acknowledgement. A payment caller must retry a failed or interrupted outcome request. Provider callback correlation and reconciliation remain deferred.
+Local verification covers duplicate SQS events, status transitions, cancellation release intents, trigger-driven reconciliation after SQS and payment outcomes, and marker idempotency. Manual browser verification shows that the purchase count does not increase after cancellation. The nine-gate local integration suite does not exercise cancellation release. Automated MongoDB and Valkey integration must still verify ownership, duplicate release, new checkout after cancellation, and active partial-index behavior. There is no background release sweep. SQS retries when reconciliation fails before acknowledgement. A payment caller must retry a failed or interrupted outcome request. Provider callback correlation and reconciliation remain deferred.
 
 ## Increment 8: storefront purchase experience
 
-Status: implemented. The local integration suite checks storefront delivery, backend health, sign-up, session cookies, API Gateway checkout, the local combined authentication adapter, SQS persistence, and owner payment. The [REQUEST-authorizer prototype](../infra/localstack/prototypes/rest-request-authorizer/) records that LocalStack `2026.8.4` Hobby did not invoke or enforce the configured authorizer. Deployed CloudFront and AWS checks remain pending.
+Status: implemented. The local integration suite records storefront delivery, backend health, sign-up, session cookies, API Gateway checkout, the local combined authentication adapter, SQS persistence, and owner payment. The [REQUEST-authorizer prototype](../infra/localstack/prototypes/rest-request-authorizer/) records that LocalStack `2026.8.4` Hobby did not invoke or enforce the configured authorizer. Deployed CloudFront, AWS API Gateway, Lambda, IAM, and production authorizer behavior remain unverified.
 
 Angle A: let the browser call the configured deployed CloudFront checkout endpoint directly. CloudFront routes to API Gateway REST API, whose REQUEST Lambda authorizer checks the Better Auth session in Valkey before checkout Lambda runs.
 
@@ -171,7 +173,7 @@ Deployment verification remains required. Check CloudFront routing, cookie and O
 
 ## Increment 9: stress and resilience evidence
 
-Status: checkout load-test setup and three-run report harness implemented. No k6 load result exists yet.
+Status: the local k6 benchmark ran. The combined result is `FAIL`: the 10 and 20 VU profiles passed, and the 40 VU profile failed after one request timed out.
 
 Angle A: run k6 against the local service set first, then repeat against the selected deployment shape.
 
@@ -181,7 +183,9 @@ Selection recorded by this design: Angle A.
 
 Reason: local repeatability exposes invariant failures before deployment cost.
 
-The local runner creates separate stacks for 10, 20, and 40 VUs. Each VU performs 10 iterations, which gives 100, 200, and 400 preloaded Better Auth sessions. The listings have 20, 40, and 80 available units. The expected outcomes are 20, 40, and 80 accepted orders, plus 80, 160, and 320 sold-out responses. After each measured run, it completes accepted orders through the owner API and verifies exact iteration counts, order counts, and secured slot ownership in MongoDB. It saves JSON and HTML reports before it removes that run's project volumes. The harness does not count as load evidence. Run it and review the reports before anyone reports throughput, latency percentiles, error rate, or checkout outcomes.
+The [2026-09-25 local benchmark report](local-k6-benchmark-2026-09-25.md) records the results. The 10 VU × 10 profile passed with 20 accepted requests, 80 sold-out responses, 20 `COMPLETE` orders, and 20 matching secured slots. The 20 VU × 10 profile passed with 40 accepted requests, 160 sold-out responses, 40 `COMPLETE` orders, and 40 matching secured slots. The 40 VU × 10 profile failed: one request timed out after about 60,004 ms, with 80 accepted requests, 319 sold-out responses, 80 `COMPLETE` orders, and 80 matching secured slots. The combined benchmark result is `FAIL`. This gives concurrent inventory evidence for these local profiles.
+
+The benchmark ran on local macOS arm64 with Node.js 24.15.0, Docker k6 1.5.0, Caddy, LocalStack API Gateway, Lambda and SQS, MongoDB, and Valkey. These results describe one local run. They do not prove deployed performance.
 
 Further verification remains planned for failure injection, recovery time, event-order permutations, release replay, and every invariant in `docs/testing-strategy.md`.
 
@@ -189,7 +193,7 @@ Open choice: select the live storefront wording for the case where public remain
 
 ## Increment 10: local full-stack test infrastructure
 
-Status: implemented. Run the local suite to record integration evidence. Deployed AWS checks remain pending.
+Status: implemented. The local suite ran and recorded evidence through nine integration gates. Deployed AWS checks remain pending.
 
 Angle A: use Caddy as a same-origin local edge and LocalStack for REST API Gateway, Lambda, and SQS.
 
@@ -201,7 +205,7 @@ Reason: LocalStack Hobby supports the required API Gateway, Lambda, and SQS serv
 
 The local stack uses Compose services in `infra/compose.yml`, Lambda artifacts in `.artifacts/lambdas`, and the CloudFormation template in `infra/localstack/template.yaml`. The integration runner reads `.localstack` without printing the token, creates a per-run auth secret and sale window, and runs its checks after cleanup in a `finally` path.
 
-Local verification checks storefront delivery, backend health, sign-up and session cookies, the authorizer and checkout Lambda, SQS-to-MongoDB persistence, owner order reads, and the payment outcome. These checks do not prove CloudFront, deployed API Gateway, deployed Lambda, or production IAM behavior.
+The nine local gates check backend health; SQS worker consume, persistence, and acknowledgement; idempotent seed and conflict rejection; storefront delivery; listing status reads; API Gateway reachability; invalid-session rejection by the combined local Lambda; trusted identity and SQS persistence; and same-origin checkout, owner order reads, and successful payment. Manual browser verification shows that the purchase count does not increase after cancellation, but the suite does not exercise cancellation release. Automated MongoDB and Valkey cancellation-release integration remains unverified. The suite also does not prove deployed CloudFront, AWS API Gateway, Lambda, IAM, or production authorizer behavior, failure injection, recovery time, event-order permutations, or dead-letter behavior.
 
 ## Change log
 
@@ -233,3 +237,5 @@ Local verification checks storefront delivery, backend health, sign-up and sessi
 ### 2026-09-25
 
 - Added the Caddy and LocalStack local full-stack test increment. Deployed CloudFront and AWS behavior remain unverified.
+- Recorded nine local integration gates and the 2026-09-25 k6 benchmark. The 10 and 20 VU profiles passed. The 40 VU profile timed out on one request, so the combined benchmark failed. Deployed AWS performance and the remaining resilience checks stay unverified.
+- Recorded manual browser evidence that the purchase count did not increase after cancellation. Automated MongoDB and Valkey cancellation-release integration remains unverified.
