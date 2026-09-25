@@ -13,6 +13,8 @@
     "format:check": "prettier --check .",
     "generate:api": "node scripts/generate-api.mjs",
     "package:lambdas": "node scripts/package-lambdas.mjs",
+    "stack:start": "node scripts/test-integration.mjs --start",
+    "stack:stop": "node scripts/stop-local-stack.mjs",
     "test:infra": "node --test infra/localstack/template.test.mjs",
     "test:integration": "node scripts/test-integration.mjs",
     "typecheck": "pnpm generate:api && pnpm --filter @bookipi/backend typecheck && pnpm --filter @bookipi/checkout-authorizer typecheck && pnpm --filter @bookipi/checkout-processor typecheck && pnpm --filter @bookipi/storefront typecheck",

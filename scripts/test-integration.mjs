@@ -6,6 +6,7 @@ import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const prepareK6 = process.argv.slice(2).includes('--prepare-k6')
+const startStack = process.argv.slice(2).includes('--start')
 let k6AvailableUnits = 20
 if (prepareK6 && process.env.K6_AVAILABLE_UNITS) {
   k6AvailableUnits = Number(process.env.K6_AVAILABLE_UNITS)
@@ -765,17 +766,24 @@ try {
   process.stdout.write(
     'Setup PASS LocalStack resources and local services are ready.\n',
   )
-  if (prepareK6) {
+  if (prepareK6 || startStack) {
     const now = Date.now()
     saleStartsAt = new Date(now - 60_000).toISOString()
     saleEndsAt = new Date(now + 3_600_000).toISOString()
-    await runSeed({
-      DEMO_INITIAL_SLOT_COUNT: String(k6AvailableUnits),
-      DEMO_RESERVE_SLOTS: '0',
-    })
-    process.stdout.write(
-      `K6_PREPARE PASS\nK6_LISTING_ID=${listingId}\nK6_AVAILABLE_UNITS=${k6AvailableUnits}\nK6_SALE_STARTS_AT=${saleStartsAt}\nK6_SALE_ENDS_AT=${saleEndsAt}\n`,
-    )
+    if (prepareK6) {
+      await runSeed({
+        DEMO_INITIAL_SLOT_COUNT: String(k6AvailableUnits),
+        DEMO_RESERVE_SLOTS: '0',
+      })
+      process.stdout.write(
+        `K6_PREPARE PASS\nK6_LISTING_ID=${listingId}\nK6_AVAILABLE_UNITS=${k6AvailableUnits}\nK6_SALE_STARTS_AT=${saleStartsAt}\nK6_SALE_ENDS_AT=${saleEndsAt}\n`,
+      )
+    } else {
+      await runSeed()
+      process.stdout.write(
+        `STACK_START PASS\nSTACK_LISTING_ID=${listingId}\nSTACK_URL=${browserOrigin}\nSTACK_SALE_STARTS_AT=${saleStartsAt}\nSTACK_SALE_ENDS_AT=${saleEndsAt}\n`,
+      )
+    }
     keepStackRunning = true
   } else {
     await runAcceptanceGates()
