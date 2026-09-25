@@ -8,6 +8,13 @@ import type { Redis } from 'ioredis'
 export { listingInputSchema }
 
 const seedListingScript = `
+-- KEYS[1]: sale metadata hash.
+-- KEYS[2]: available slot list.
+-- ARGV[1]: sale start time in epoch milliseconds.
+-- ARGV[2]: sale end time in epoch milliseconds.
+-- ARGV[3]: number of reserved slots.
+-- ARGV[4]: seed version.
+-- ARGV[5..n]: slot IDs to add to the available slot list.
 if redis.call('EXISTS', KEYS[1]) == 1 or redis.call('EXISTS', KEYS[2]) == 1 then
   return -1
 end
@@ -30,6 +37,9 @@ return slotCount
 `
 
 const publishListingScript = `
+-- KEYS[1]: sale metadata hash.
+-- KEYS[2]: available slot list.
+-- ARGV[1]: expected number of seeded slots.
 local expectedCount = tonumber(ARGV[1])
 if redis.call('LLEN', KEYS[2]) ~= expectedCount then
   return 0
@@ -42,6 +52,17 @@ return 1
 `
 
 const releaseCancelledSlotScript = `
+-- KEYS[1]: sale metadata hash.
+-- KEYS[2]: available slot list.
+-- KEYS[3]: order data hash.
+-- KEYS[4]: release marker hash for this order.
+-- KEYS[5]: active customer hash.
+-- ARGV[1]: order ID.
+-- ARGV[2]: listing ID.
+-- ARGV[3]: raw customer ID.
+-- ARGV[4]: encoded customer ID used as the active customer field.
+-- ARGV[5]: slot ID.
+-- ARGV[6]: durable order status; must be CANCELLED.
 local orderId = ARGV[1]
 local listingId = ARGV[2]
 local rawCustomerId = ARGV[3]
