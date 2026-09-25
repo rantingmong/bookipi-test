@@ -46,23 +46,25 @@ Install dependencies from the repository root:
 pnpm install
 ```
 
-Prepare a stack for manual checkout load tests:
+Start the local stack with an active listing:
 
 ```sh
-node scripts/test-integration.mjs --prepare-k6
+pnpm stack:start
 ```
 
-This command packages the checkout Lambda, starts the services, deploys the LocalStack template, and seeds an active listing. It prints the `K6_*` values for the test. It leaves the stack running. Open `http://bookipi.localhost:3200` to use the storefront.
+This command packages the checkout Lambda, starts the services, deploys the LocalStack template, and seeds an active listing. It prints the listing ID, URL, and sale window. It leaves the stack running. Open the printed URL to use the storefront.
 
 The command reads the token from `.localstack`. Set `LOCALSTACK_TOKEN_FILE` to use another token path. Read [local infrastructure](infra/README.md) for stack details.
 
-Stop the stack after manual testing:
+Stop the stack after local use:
 
 ```sh
-LOCALSTACK_AUTH_TOKEN=dummy BETTER_AUTH_SECRET=dummy docker compose -f infra/compose.yml down
+pnpm stack:stop
 ```
 
-The dummy values let Docker Compose read its required variables during shutdown.
+This command keeps the MongoDB data volume.
+
+For a manual checkout load test, use `node scripts/test-integration.mjs --prepare-k6`. It prepares an active listing with the `K6_*` values for the test. Run `pnpm stack:stop` after the test.
 
 ## Run tests
 

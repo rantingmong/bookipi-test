@@ -53,8 +53,8 @@ Replace `PASTE_K6_LISTING_ID` with the printed listing ID. The preparation outpu
 
 The test records `accepted`, `sold_out`, `other_conflict`, and `unexpected` outcomes in the `checkout_outcomes` metric. Only HTTP 202 and the expected HTTP 409 `SOLD_OUT` response pass the check. Review the other metrics and the environment before you report a result. A test run does not prove deployed AWS or CloudFront behavior.
 
-Stop the local stack after the test. Compose needs values for its required variables while it reads the file. Dummy values are enough for `down`:
+Stop the local stack after the test:
 
 ```sh
-LOCALSTACK_AUTH_TOKEN=dummy BETTER_AUTH_SECRET=dummy docker compose -f infra/compose.yml down
+pnpm stack:stop
 ```
